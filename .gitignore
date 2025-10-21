@@ -1,0 +1,72 @@
+# Byte-compiled / optimization
+*.py[cod]
+*.$py.class
+__pycache__/
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+dist/
+downloads/
+eggs/
+.eggs/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+*.egg-info/
+
+# Virtualenvs
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# IDEs and editors
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
+
+# Django
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+media/
+staticfiles/
+# Si colectas estáticos en una carpeta llamada "static", puedes ignorarla:
+# static/
+
+# Testing and coverage
+.coverage
+coverage.xml
+htmlcov/
+.tox/
+.nox/
+.pytest_cache/
+pytest_cache/
+
+# Type checkers / caches
+.mypy_cache/
+.pyre/
+ruff-cache/
+
+# Celery
+celerybeat-schedule
+celerybeat.pid
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Environment files
+.env
+.env.* 
