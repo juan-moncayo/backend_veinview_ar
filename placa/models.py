@@ -46,6 +46,11 @@ class PracticaActiva(models.Model):
     
     duracion_total_segundos = models.IntegerField(default=0, help_text="Duración acumulada en segundos")
     
+    # NUEVO: Métricas de desempeño
+    numero_intentos = models.IntegerField(default=0, help_text="Número de intentos de canalización")
+    intentos_exitosos = models.IntegerField(default=0, help_text="Intentos con técnica correcta")
+    precision_promedio = models.FloatField(default=0.0, help_text="Precisión promedio (%)")
+    
     class Meta:
         verbose_name = "Práctica Activa"
         verbose_name_plural = "Prácticas Activas"
@@ -74,7 +79,7 @@ class PracticaActiva(models.Model):
             self.save()
     
     def finalizar(self):
-        """Finaliza la práctica"""
+        """Finaliza la práctica y calcula métricas"""
         if self.estado in ['iniciada', 'pausada']:
             ahora = timezone.now()
             if self.estado == 'iniciada':
@@ -86,7 +91,32 @@ class PracticaActiva(models.Model):
             
             self.estado = 'finalizada'
             self.fecha_fin = ahora
+            
+            # Calcular métricas finales
+            self.calcular_metricas()
             self.save()
+    
+    def calcular_metricas(self):
+        """Calcula métricas de desempeño de la práctica"""
+        datos = self.datos_sensores.all()
+        if datos.exists():
+            # Calcular precisión basada en ángulos y fuerza
+            total_datos = datos.count()
+            datos_correctos = datos.filter(
+                angulo_pitch__gte=10,
+                angulo_pitch__lte=30,
+                fuerza__gte=50,
+                fuerza__lte=300
+            ).count()
+            
+            self.precision_promedio = (datos_correctos / total_datos * 100) if total_datos > 0 else 0
+    
+    def registrar_intento(self, exitoso=False):
+        """Registra un nuevo intento de canalización"""
+        self.numero_intentos += 1
+        if exitoso:
+            self.intentos_exitosos += 1
+        self.save(update_fields=['numero_intentos', 'intentos_exitosos'])
 
 
 class DatosSensor(models.Model):
@@ -115,6 +145,9 @@ class DatosSensor(models.Model):
     timestamp = models.DateTimeField(auto_now_add=True, db_index=True)
     ip_origen = models.GenericIPAddressField(null=True, blank=True)
     
+    # NUEVO: Indicador de técnica correcta
+    tecnica_correcta = models.BooleanField(default=False, help_text="¿Datos dentro de rango óptimo?")
+    
     class Meta:
         verbose_name = "Dato de Sensor"
         verbose_name_plural = "Datos de Sensores"
@@ -123,6 +156,14 @@ class DatosSensor(models.Model):
             models.Index(fields=['practica', '-timestamp']),
             models.Index(fields=['dispositivo', '-timestamp']),
         ]
+    
+    def save(self, *args, **kwargs):
+        # Evaluar si la técnica es correcta basándose en rangos
+        self.tecnica_correcta = (
+            10 <= self.angulo_pitch <= 30 and
+            50 <= self.fuerza <= 300
+        )
+        super().save(*args, **kwargs)
     
     def __str__(self):
         return f"Práctica {self.practica.id} - {self.timestamp.strftime('%H:%M:%S')}"
