@@ -31,6 +31,7 @@ INSTALLED_APPS = [
     'placa.apps.PlacaConfig',
     'profesor.apps.ProfesorConfig',
     'estudiantes.apps.EstudiantesConfig',
+    'RA.apps.RAConfig',
 ]
 
 MIDDLEWARE = [
