@@ -73,20 +73,20 @@ def verificar_session_token(request):
 
 
 # ==========================================
-# ENDPOINTS PRINCIPALES PARA UNREAL ENGINE
+# NUEVO: ENDPOINTS DE CONEXIÓN AUTOMÁTICA
 # ==========================================
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
-def conectar_ra(request):
+def conectar_automatico(request):
     """
-    Endpoint para iniciar una sesión RA desde Unreal Engine
+    🆕 Endpoint para conexión automática desde Unity
+    Detecta la práctica activa automáticamente y conecta el dispositivo RA
     
-    POST /api/ra/conectar/
+    POST /api/ra/conectar-automatico/
     Body: {
-        "estudiante_id": 1,
-        "practica_id": 2,  // Opcional
-        "dispositivo_ra": "HoloLens 2",
+        "dispositivo_ra": "Meta Quest 3",
+        "device_id": "UNIQUE-DEVICE-ID-12345",  // MAC address o identificador único
         "modo_visualizacion": "overlay",
         "escala_modelo": 1.0,
         "opacidad": 0.8
@@ -94,13 +94,378 @@ def conectar_ra(request):
     
     Response: {
         "status": "success",
-        "message": "Conexión establecida",
+        "message": "Conectado a práctica activa",
         "session_token": "xxx",
         "sesion_id": 1,
+        "practica_activa": true,
+        "practica": {...},
         "estudiante": {...},
-        "configuracion": {...},
-        "endpoints": {...}
+        "configuracion": {...}
     }
+    """
+    dispositivo_ra = request.data.get('dispositivo_ra', 'Meta Quest 3')
+    device_id = request.data.get('device_id')
+    modo_visualizacion = request.data.get('modo_visualizacion', 'overlay')
+    escala_modelo = request.data.get('escala_modelo', 1.0)
+    opacidad = request.data.get('opacidad', 0.8)
+    
+    if not device_id:
+        return Response(
+            {'error': 'device_id es requerido (MAC address o identificador único del dispositivo)'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # 1. Buscar práctica activa en el sistema (iniciada o pausada)
+    practica_activa = PracticaActiva.objects.filter(
+        estado__in=['iniciada', 'pausada']
+    ).select_related('estudiante', 'dispositivo').order_by('-fecha_inicio').first()
+    
+    if not practica_activa:
+        return Response({
+            'status': 'no_practice',
+            'message': 'No hay ninguna práctica activa en este momento. Espere a que un estudiante inicie una práctica.',
+            'practica_activa': False,
+            'session_token': None
+        }, status=status.HTTP_200_OK)
+    
+    estudiante = practica_activa.estudiante
+    
+    # 2. Verificar si ya existe una sesión activa para este dispositivo
+    sesion_existente = SesionRA.objects.filter(
+        dispositivo_ra__icontains=device_id,
+        estado__in=['activa', 'pausada']
+    ).first()
+    
+    if sesion_existente:
+        # Actualizar la sesión existente con la práctica actual
+        sesion_existente.practica = practica_activa
+        sesion_existente.estudiante = estudiante
+        sesion_existente.estado = 'activa'
+        sesion_existente.fecha_ultima_actividad = timezone.now()
+        sesion_existente.ip_address = get_client_ip(request)
+        sesion_existente.save()
+        
+        sesion = sesion_existente
+        mensaje = 'Reconectado a práctica activa'
+    else:
+        # 3. Finalizar otras sesiones del mismo dispositivo
+        SesionRA.objects.filter(
+            dispositivo_ra__icontains=device_id,
+            estado__in=['conectando', 'activa', 'pausada']
+        ).update(estado='desconectada', fecha_fin=timezone.now())
+        
+        # 4. Crear nueva sesión RA
+        sesion = SesionRA.objects.create(
+            estudiante=estudiante,
+            practica=practica_activa,
+            dispositivo_ra=f"{dispositivo_ra} ({device_id})",
+            ip_address=get_client_ip(request),
+            estado='activa',
+            modo_visualizacion=modo_visualizacion,
+            escala_modelo=escala_modelo,
+            opacidad=opacidad
+        )
+        
+        mensaje = 'Conectado exitosamente a práctica activa'
+        
+        # Registrar evento de conexión
+        EventoRA.objects.create(
+            sesion=sesion,
+            tipo='conexion',
+            descripcion=f'Conexión automática desde {sesion.dispositivo_ra}',
+            datos_adicionales={
+                'ip': sesion.ip_address,
+                'device_id': device_id,
+                'practica_id': practica_activa.id,
+                'estudiante_id': estudiante.id
+            }
+        )
+    
+    # 5. Obtener o crear configuración del estudiante
+    config, created = ConfiguracionRA.objects.get_or_create(
+        estudiante=estudiante,
+        defaults={
+            'color_angulo_correcto': '#00FF00',
+            'color_angulo_incorrecto': '#FF0000',
+            'color_fuerza_correcta': '#0000FF',
+        }
+    )
+    
+    # 6. Preparar respuesta
+    response_data = {
+        'status': 'success',
+        'message': mensaje,
+        'session_token': sesion.session_token,
+        'sesion_id': sesion.id,
+        'practica_activa': True,
+        'practica': {
+            'id': practica_activa.id,
+            'estado': practica_activa.estado,
+            'fecha_inicio': practica_activa.fecha_inicio.isoformat(),
+            'duracion_segundos': practica_activa.duracion_total_segundos
+        },
+        'estudiante': {
+            'id': estudiante.id,
+            'nombre': estudiante.nombre_completo,
+            'codigo': estudiante.codigo_estudiante
+        },
+        'configuracion': ConfiguracionRASerializer(config).data,
+        'endpoints': {
+            'alertas': '/api/ra/alertas/',
+            'heartbeat': '/api/ra/heartbeat/',
+            'desconectar': '/api/ra/desconectar/',
+            'practica_actual': '/api/ra/practica-actual/'
+        }
+    }
+    
+    return Response(response_data, status=status.HTTP_200_OK)
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def practica_actual(request):
+    """
+    🆕 Endpoint para verificar qué práctica está activa actualmente
+    
+    GET /api/ra/practica-actual/
+    
+    Response: {
+        "practica_activa": true,
+        "practica_id": 5,
+        "estudiante": {...},
+        "estado": "iniciada",
+        "cambio_detectado": false
+    }
+    """
+    practica_activa = PracticaActiva.objects.filter(
+        estado__in=['iniciada', 'pausada']
+    ).select_related('estudiante').order_by('-fecha_inicio').first()
+    
+    if not practica_activa:
+        return Response({
+            'practica_activa': False,
+            'practica_id': None,
+            'estudiante': None,
+            'estado': None,
+            'message': 'No hay prácticas activas en este momento'
+        })
+    
+    return Response({
+        'practica_activa': True,
+        'practica_id': practica_activa.id,
+        'estudiante': {
+            'id': practica_activa.estudiante.id,
+            'nombre': practica_activa.estudiante.nombre_completo,
+            'codigo': practica_activa.estudiante.codigo_estudiante
+        },
+        'estado': practica_activa.estado,
+        'fecha_inicio': practica_activa.fecha_inicio.isoformat(),
+        'duracion_segundos': practica_activa.duracion_total_segundos
+    })
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def alertas_ra(request):
+    """
+    🆕 Endpoint mejorado para obtener alertas en tiempo real
+    Unity consulta este endpoint cada 0.5 segundos
+    
+    GET /api/ra/alertas/?session_token=xxx
+    
+    Response: {
+        "status": "ok",
+        "timestamp": 1234567890,
+        "alertas_activas": true,
+        "alerta_critica": false,
+        "tecnica_correcta": false,
+        "fuerza": {
+            "activa": true,
+            "valor_actual": 350.5,
+            "en_rango_optimo": false,
+            "en_rango_aceptable": false,
+            "mensaje": "Fuerza muy alta"
+        },
+        "angulo": {
+            "activa": true,
+            "valor_actual": 45.2,
+            "en_rango_optimo": false,
+            "en_rango_aceptable": true,
+            "mensaje": "Ángulo ligeramente alto"
+        },
+        "rangos": {
+            "angulo_optimo": {"min": 10, "max": 30},
+            "fuerza_optima": {"min": 50, "max": 300}
+        }
+    }
+    """
+    sesion, error_response = verificar_session_token(request)
+    if error_response:
+        return error_response
+    
+    # Verificar si hay práctica activa
+    if not sesion.practica or sesion.practica.estado != 'iniciada':
+        return Response({
+            'status': 'no_practice',
+            'message': 'No hay práctica activa o está pausada',
+            'timestamp': int(time.time() * 1000),
+            'alertas_activas': False,
+            'alerta_critica': False,
+            'tecnica_correcta': False,
+            'fuerza': {
+                'activa': False,
+                'valor_actual': 0.0,
+                'en_rango_optimo': True,
+                'en_rango_aceptable': True,
+                'mensaje': 'Sin datos'
+            },
+            'angulo': {
+                'activa': False,
+                'valor_actual': 0.0,
+                'en_rango_optimo': True,
+                'en_rango_aceptable': True,
+                'mensaje': 'Sin datos'
+            },
+            'rangos': {
+                'angulo_optimo': {'min': 10, 'max': 30},
+                'fuerza_optima': {'min': 50, 'max': 300}
+            }
+        })
+    
+    # Obtener el dato más reciente
+    ultimo_dato = DatosSensor.objects.filter(
+        practica=sesion.practica
+    ).order_by('-timestamp').first()
+    
+    if not ultimo_dato:
+        return Response({
+            'status': 'ok',
+            'message': 'Esperando datos de sensores...',
+            'timestamp': int(time.time() * 1000),
+            'alertas_activas': False,
+            'alerta_critica': False,
+            'tecnica_correcta': False,
+            'fuerza': {
+                'activa': False,
+                'valor_actual': 0.0,
+                'en_rango_optimo': True,
+                'en_rango_aceptable': True,
+                'mensaje': 'Esperando datos'
+            },
+            'angulo': {
+                'activa': False,
+                'valor_actual': 0.0,
+                'en_rango_optimo': True,
+                'en_rango_aceptable': True,
+                'mensaje': 'Esperando datos'
+            },
+            'rangos': {
+                'angulo_optimo': {'min': 10, 'max': 30},
+                'fuerza_optima': {'min': 50, 'max': 300}
+            }
+        })
+    
+    # Rangos de validación
+    ANGULO_MIN_OPTIMO = 10
+    ANGULO_MAX_OPTIMO = 30
+    ANGULO_MIN_ACEPTABLE = 5
+    ANGULO_MAX_ACEPTABLE = 40
+    
+    FUERZA_MIN_OPTIMA = 50
+    FUERZA_MAX_OPTIMA = 300
+    FUERZA_MIN_ACEPTABLE = 30
+    FUERZA_MAX_ACEPTABLE = 400
+    
+    # Evaluar ángulo
+    angulo_actual = ultimo_dato.angulo_pitch
+    angulo_en_rango_optimo = ANGULO_MIN_OPTIMO <= angulo_actual <= ANGULO_MAX_OPTIMO
+    angulo_en_rango_aceptable = ANGULO_MIN_ACEPTABLE <= angulo_actual <= ANGULO_MAX_ACEPTABLE
+    
+    if angulo_en_rango_optimo:
+        angulo_mensaje = "Ángulo correcto"
+        angulo_alerta = False
+    elif angulo_en_rango_aceptable:
+        if angulo_actual < ANGULO_MIN_OPTIMO:
+            angulo_mensaje = "Ángulo bajo - Ajustar ligeramente"
+        else:
+            angulo_mensaje = "Ángulo alto - Ajustar ligeramente"
+        angulo_alerta = True
+    else:
+        if angulo_actual < ANGULO_MIN_ACEPTABLE:
+            angulo_mensaje = "⚠️ ÁNGULO MUY BAJO"
+        else:
+            angulo_mensaje = "⚠️ ÁNGULO MUY ALTO"
+        angulo_alerta = True
+    
+    # Evaluar fuerza
+    fuerza_actual = ultimo_dato.fuerza
+    fuerza_en_rango_optimo = FUERZA_MIN_OPTIMA <= fuerza_actual <= FUERZA_MAX_OPTIMA
+    fuerza_en_rango_aceptable = FUERZA_MIN_ACEPTABLE <= fuerza_actual <= FUERZA_MAX_ACEPTABLE
+    
+    if fuerza_en_rango_optimo:
+        fuerza_mensaje = "Fuerza correcta"
+        fuerza_alerta = False
+    elif fuerza_en_rango_aceptable:
+        if fuerza_actual < FUERZA_MIN_OPTIMA:
+            fuerza_mensaje = "Fuerza baja - Presionar más"
+        else:
+            fuerza_mensaje = "Fuerza alta - Reducir presión"
+        fuerza_alerta = True
+    else:
+        if fuerza_actual < FUERZA_MIN_ACEPTABLE:
+            fuerza_mensaje = "⚠️ FUERZA MUY BAJA"
+        else:
+            fuerza_mensaje = "⚠️ FUERZA MUY ALTA"
+        fuerza_alerta = True
+    
+    # Determinar si hay alertas críticas
+    alerta_critica = (
+        (not angulo_en_rango_aceptable) or 
+        (not fuerza_en_rango_aceptable)
+    )
+    
+    # Técnica correcta = ambos en rango óptimo
+    tecnica_correcta = angulo_en_rango_optimo and fuerza_en_rango_optimo
+    
+    alertas_activas = angulo_alerta or fuerza_alerta
+    
+    return Response({
+        'status': 'ok',
+        'timestamp': int(time.time() * 1000),
+        'alertas_activas': alertas_activas,
+        'alerta_critica': alerta_critica,
+        'tecnica_correcta': tecnica_correcta,
+        'fuerza': {
+            'activa': fuerza_alerta,
+            'valor_actual': round(fuerza_actual, 2),
+            'en_rango_optimo': fuerza_en_rango_optimo,
+            'en_rango_aceptable': fuerza_en_rango_aceptable,
+            'mensaje': fuerza_mensaje
+        },
+        'angulo': {
+            'activa': angulo_alerta,
+            'valor_actual': round(angulo_actual, 2),
+            'en_rango_optimo': angulo_en_rango_optimo,
+            'en_rango_aceptable': angulo_en_rango_aceptable,
+            'mensaje': angulo_mensaje
+        },
+        'rangos': {
+            'angulo_optimo': {'min': ANGULO_MIN_OPTIMO, 'max': ANGULO_MAX_OPTIMO},
+            'fuerza_optima': {'min': FUERZA_MIN_OPTIMA, 'max': FUERZA_MAX_OPTIMA}
+        }
+    })
+
+
+# ==========================================
+# ENDPOINTS EXISTENTES (MANTENIDOS)
+# ==========================================
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def conectar_ra(request):
+    """
+    Endpoint ORIGINAL para iniciar una sesión RA desde Unreal Engine
+    (MANTENIDO para compatibilidad)
     """
     serializer = SesionRACreateSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
@@ -108,18 +473,15 @@ def conectar_ra(request):
     data = serializer.validated_data
     estudiante = Estudiante.objects.get(id=data['estudiante_id'])
     
-    # Verificar si hay práctica activa
     practica = None
     if data.get('practica_id'):
         practica = PracticaActiva.objects.get(id=data['practica_id'])
     
-    # Finalizar sesiones anteriores del mismo estudiante
     SesionRA.objects.filter(
         estudiante=estudiante,
         estado__in=['conectando', 'activa', 'pausada']
     ).update(estado='desconectada', fecha_fin=timezone.now())
     
-    # Crear nueva sesión
     sesion = SesionRA.objects.create(
         estudiante=estudiante,
         practica=practica,
@@ -131,7 +493,6 @@ def conectar_ra(request):
         opacidad=data['opacidad']
     )
     
-    # Registrar evento de conexión
     EventoRA.objects.create(
         sesion=sesion,
         tipo='conexion',
@@ -142,7 +503,6 @@ def conectar_ra(request):
         }
     )
     
-    # Obtener o crear configuración del estudiante
     config, created = ConfiguracionRA.objects.get_or_create(
         estudiante=estudiante,
         defaults={
@@ -152,7 +512,6 @@ def conectar_ra(request):
         }
     )
     
-    # Preparar respuesta
     response_data = {
         'status': 'success',
         'message': 'Conexión establecida exitosamente',
@@ -179,41 +538,14 @@ def conectar_ra(request):
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def stream_datos_ra(request):
-    """
-    Endpoint para obtener datos en tiempo real para Unreal Engine
-    
-    GET /api/ra/stream/?session_token=xxx&limit=10
-    
-    Headers: X-Session-Token: xxx
-    
-    Response: {
-        "status": "ok",
-        "timestamp": 1234567890,
-        "datos": [
-            {
-                "timestamp": 1234567890,
-                "pitch": 15.5,
-                "roll": -10.2,
-                "yaw": 5.3,
-                "fuerza": 250.5,
-                "presion": 0.5,
-                "tecnica_correcta": true,
-                "dato_id": 123
-            }
-        ],
-        "practica_activa": true,
-        "estado_practica": "iniciada"
-    }
-    """
+    """Endpoint para obtener datos en tiempo real para Unreal Engine"""
     sesion, error_response = verificar_session_token(request)
     if error_response:
         return error_response
     
-    # Obtener límite de datos
     limit = int(request.GET.get('limit', 10))
-    limit = min(limit, 100)  # Máximo 100 datos por request
+    limit = min(limit, 100)
     
-    # Verificar si hay práctica activa
     if not sesion.practica:
         return Response({
             'status': 'no_practice',
@@ -222,12 +554,10 @@ def stream_datos_ra(request):
             'practica_activa': False
         })
     
-    # Obtener últimos datos de la práctica
     datos = DatosSensor.objects.filter(
         practica=sesion.practica
     ).order_by('-timestamp')[:limit]
     
-    # Convertir a formato optimizado para Unreal
     datos_stream = []
     for dato in datos:
         datos_stream.append({
@@ -241,14 +571,12 @@ def stream_datos_ra(request):
             'dato_id': dato.id
         })
         
-        # Registrar que se envió este dato
         DatosVisualizacionRA.objects.create(
             sesion=sesion,
             dato_sensor=dato,
             entregado=True
         )
     
-    # Actualizar contador de datos enviados
     sesion.total_datos_recibidos += len(datos_stream)
     sesion.save(update_fields=['total_datos_recibidos'])
     
@@ -264,26 +592,7 @@ def stream_datos_ra(request):
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def estado_practica_ra(request):
-    """
-    Endpoint para obtener el estado completo de la práctica actual
-    
-    GET /api/ra/estado-practica/?session_token=xxx
-    
-    Response: {
-        "practica_activa": true,
-        "practica_id": 1,
-        "estudiante_nombre": "Juan Pérez",
-        "estado": "iniciada",
-        "tiempo_transcurrido": 1234,
-        "numero_intentos": 5,
-        "precision_actual": 85.5,
-        "ultimo_dato": {...},
-        "rangos_optimos": {
-            "pitch": {"min": 10, "max": 30},
-            "fuerza": {"min": 50, "max": 300}
-        }
-    }
-    """
+    """Endpoint para obtener el estado completo de la práctica actual"""
     sesion, error_response = verificar_session_token(request)
     if error_response:
         return error_response
@@ -307,12 +616,11 @@ def estado_practica_ra(request):
     
     practica = sesion.practica
     
-    # Calcular tiempo transcurrido
     if practica.estado == 'finalizada':
         tiempo_transcurrido = practica.duracion_total_segundos
     elif practica.estado == 'pausada':
         tiempo_transcurrido = practica.duracion_total_segundos
-    else:  # iniciada
+    else:
         ahora = timezone.now()
         if practica.fecha_reanudacion:
             tiempo_actual = (ahora - practica.fecha_reanudacion).total_seconds()
@@ -320,7 +628,6 @@ def estado_practica_ra(request):
             tiempo_actual = (ahora - practica.fecha_inicio).total_seconds()
         tiempo_transcurrido = int(practica.duracion_total_segundos + tiempo_actual)
     
-    # Calcular precisión actual
     datos_totales = DatosSensor.objects.filter(practica=practica).count()
     datos_correctos = DatosSensor.objects.filter(
         practica=practica,
@@ -328,7 +635,6 @@ def estado_practica_ra(request):
     ).count()
     precision_actual = (datos_correctos / datos_totales * 100) if datos_totales > 0 else 0
     
-    # Obtener último dato
     ultimo_dato_obj = DatosSensor.objects.filter(practica=practica).order_by('-timestamp').first()
     ultimo_dato = None
     if ultimo_dato_obj:
@@ -351,8 +657,8 @@ def estado_practica_ra(request):
         'precision_actual': round(precision_actual, 2),
         'ultimo_dato': ultimo_dato,
         'rangos_optimos': {
-            'pitch': {'min': 10, 'max': 30},
-            'roll': {'min': -15, 'max': 15},
+            'pitch': {'min': -30, 'max': 30},
+            'roll': {'min': -30, 'max': 30},
             'fuerza': {'min': 50, 'max': 300}
         }
     })
@@ -361,23 +667,7 @@ def estado_practica_ra(request):
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def heartbeat_ra(request):
-    """
-    Endpoint para mantener la sesión activa (heartbeat)
-    Unreal Engine debe llamar a este endpoint cada 10-15 segundos
-    
-    POST /api/ra/heartbeat/
-    Body: {
-        "session_token": "xxx",
-        "timestamp": 1234567890,
-        "latencia_cliente": 45.5  // Opcional, en ms
-    }
-    
-    Response: {
-        "status": "ok",
-        "sesion_activa": true,
-        "timestamp_servidor": 1234567890
-    }
-    """
+    """Endpoint para mantener la sesión activa (heartbeat)"""
     serializer = HeartbeatSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
     
@@ -386,16 +676,13 @@ def heartbeat_ra(request):
     try:
         sesion = SesionRA.objects.get(session_token=session_token)
         
-        # Actualizar última actividad
         sesion.fecha_ultima_actividad = timezone.now()
         
-        # Actualizar latencia promedio si se proporciona
         if serializer.validated_data.get('latencia_cliente'):
             latencia_nueva = serializer.validated_data['latencia_cliente']
             if sesion.latencia_promedio == 0:
                 sesion.latencia_promedio = latencia_nueva
             else:
-                # Promedio móvil
                 sesion.latencia_promedio = (sesion.latencia_promedio * 0.8 + latencia_nueva * 0.2)
         
         sesion.save(update_fields=['fecha_ultima_actividad', 'latencia_promedio'])
@@ -418,20 +705,7 @@ def heartbeat_ra(request):
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def desconectar_ra(request):
-    """
-    Endpoint para cerrar una sesión RA
-    
-    POST /api/ra/desconectar/
-    Body: {
-        "session_token": "xxx"
-    }
-    
-    Response: {
-        "status": "ok",
-        "message": "Sesión finalizada",
-        "estadisticas": {...}
-    }
-    """
+    """Endpoint para cerrar una sesión RA"""
     session_token = request.data.get('session_token')
     
     if not session_token:
@@ -443,7 +717,6 @@ def desconectar_ra(request):
     try:
         sesion = SesionRA.objects.get(session_token=session_token)
         
-        # Registrar evento de desconexión
         EventoRA.objects.create(
             sesion=sesion,
             tipo='desconexion',
@@ -453,10 +726,8 @@ def desconectar_ra(request):
             }
         )
         
-        # Finalizar sesión
         sesion.finalizar()
         
-        # Estadísticas de la sesión
         estadisticas = {
             'duracion_total': int((sesion.fecha_fin - sesion.fecha_inicio).total_seconds()),
             'total_datos_recibidos': sesion.total_datos_recibidos,
@@ -479,17 +750,7 @@ def desconectar_ra(request):
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def registrar_evento_ra(request):
-    """
-    Endpoint para registrar eventos desde Unreal Engine
-    
-    POST /api/ra/eventos/
-    Body: {
-        "session_token": "xxx",
-        "tipo": "calibracion",
-        "descripcion": "Usuario calibró el sistema",
-        "datos_adicionales": {...}
-    }
-    """
+    """Endpoint para registrar eventos desde Unreal Engine"""
     sesion, error_response = verificar_session_token(request)
     if error_response:
         return error_response
@@ -517,9 +778,7 @@ def registrar_evento_ra(request):
 # ==========================================
 
 class SesionRAViewSet(viewsets.ModelViewSet):
-    """
-    ViewSet para gestionar sesiones RA desde el panel web
-    """
+    """ViewSet para gestionar sesiones RA desde el panel web"""
     queryset = SesionRA.objects.select_related('estudiante', 'practica').all()
     serializer_class = SesionRASerializer
     permission_classes = [AllowAny]
@@ -552,9 +811,7 @@ class SesionRAViewSet(viewsets.ModelViewSet):
 
 
 class ConfiguracionRAViewSet(viewsets.ModelViewSet):
-    """
-    ViewSet para gestionar configuraciones RA
-    """
+    """ViewSet para gestionar configuraciones RA"""
     queryset = ConfiguracionRA.objects.select_related('estudiante').all()
     serializer_class = ConfiguracionRASerializer
     permission_classes = [AllowAny]
@@ -583,9 +840,7 @@ class ConfiguracionRAViewSet(viewsets.ModelViewSet):
 
 
 class EventoRAViewSet(viewsets.ReadOnlyModelViewSet):
-    """
-    ViewSet para ver eventos RA (solo lectura)
-    """
+    """ViewSet para ver eventos RA (solo lectura)"""
     queryset = EventoRA.objects.select_related('sesion').all()
     serializer_class = EventoRASerializer
     permission_classes = [AllowAny]
