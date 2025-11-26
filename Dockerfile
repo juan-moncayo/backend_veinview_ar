@@ -1,10 +1,8 @@
-# Usar Python 3.11
 FROM python:3.11-slim
 
-# Establecer directorio de trabajo
 WORKDIR /app
 
-# Instalar dependencias del sistema para PostgreSQL
+# Instalar dependencias del sistema
 RUN apt-get update && apt-get install -y \
     postgresql-client \
     gcc \
@@ -13,25 +11,35 @@ RUN apt-get update && apt-get install -y \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Copiar requirements
+# Copiar e instalar requirements
 COPY requirements.txt .
-
-# Instalar dependencias de Python
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copiar todo el proyecto
+# Copiar proyecto
 COPY . .
 
-# Crear directorios necesarios
+# Crear directorios
 RUN mkdir -p logs staticfiles media
 
-# Recolectar archivos estáticos
-RUN python manage.py collectstatic --noinput || true
+# Collectstatic
+RUN python manage.py collectstatic --noinput --clear || echo "Collectstatic failed, continuing..."
 
-# Exponer puerto (Railway usa PORT dinámico)
+# Exponer puerto
 EXPOSE $PORT
 
-# Script de inicio que ejecuta migraciones automáticamente
-# Railway proporciona $PORT automáticamente
-CMD python manage.py migrate --noinput && \
-    gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --workers 3 --timeout 120 --access-logfile - --error-logfile -
+# Comando de inicio con logging mejorado
+CMD echo "🚀 Starting application..." && \
+    echo "📦 Running migrations..." && \
+    python manage.py migrate --noinput && \
+    echo "✅ Migrations complete" && \
+    echo "🌐 Starting Gunicorn on port $PORT..." && \
+    gunicorn config.wsgi:application \
+        --bind 0.0.0.0:${PORT:-8000} \
+        --workers 2 \
+        --threads 4 \
+        --timeout 0 \
+        --keep-alive 5 \
+        --log-level debug \
+        --access-logfile - \
+        --error-logfile - \
+        --capture-output

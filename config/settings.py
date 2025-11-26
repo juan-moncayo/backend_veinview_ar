@@ -3,6 +3,10 @@ from decouple import config
 import dj_database_url
 import os
 
+# IMPORTANTE: Capturar el puerto de Railway
+PORT = int(os.environ.get('PORT', 8000))
+print(f"🔵 Puerto detectado: {PORT}")
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # ============================================
@@ -13,7 +17,12 @@ SECRET_KEY = config('SECRET_KEY', default='django-insecure-mosc2bzzdpp-ci5zxj*0-
 
 DEBUG = config('DEBUG', default=True, cast=bool)
 
-ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1').split(',')
+# ALLOWED_HOSTS dinámico para Railway
+ALLOWED_HOSTS_ENV = config('ALLOWED_HOSTS', default='localhost,127.0.0.1')
+if ALLOWED_HOSTS_ENV == '*':
+    ALLOWED_HOSTS = ['*']
+else:
+    ALLOWED_HOSTS = ALLOWED_HOSTS_ENV.split(',')
 
 # ============================================
 # APLICACIONES INSTALADAS
@@ -46,7 +55,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
-    'whitenoise.middleware.WhiteNoiseMiddleware',  # ✅ Para servir archivos estáticos
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -84,7 +93,6 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # CONFIGURACIÓN DE BASE DE DATOS
 # ============================================
 
-# Obtener DATABASE_URL desde .env
 DATABASE_URL = config('DATABASE_URL', default='sqlite:///db.sqlite3')
 
 if DATABASE_URL.startswith('sqlite'):
@@ -95,13 +103,17 @@ if DATABASE_URL.startswith('sqlite'):
             'NAME': BASE_DIR / 'db.sqlite3',
         }
     }
-    print("✅ Usando SQLite (desarrollo local)")
+    print("🔵 Usando SQLite (desarrollo local)")
 else:
-    # Usar PostgreSQL (Railway)
+    # Usar PostgreSQL (Railway/Producción)
     DATABASES = {
-        'default': dj_database_url.parse(DATABASE_URL)
+        'default': dj_database_url.parse(
+            DATABASE_URL,
+            conn_max_age=600,
+            conn_health_checks=True,
+        )
     }
-    print("✅ Usando PostgreSQL (Railway)")
+    print("🟢 Usando PostgreSQL (Railway)")
 
 # ============================================
 # PASSWORD VALIDATION
@@ -135,17 +147,20 @@ USE_TZ = True
 # ARCHIVOS ESTÁTICOS
 # ============================================
 
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
-# Configuración de WhiteNoise para servir archivos estáticos
+# Directorios adicionales de archivos estáticos
+STATICFILES_DIRS = []
+
+# Configuración de WhiteNoise
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 # ============================================
 # ARCHIVOS MEDIA
 # ============================================
 
-MEDIA_URL = 'media/'
+MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
 # ============================================
@@ -188,10 +203,10 @@ SIMPLE_JWT = {
 # CORS CONFIGURATION
 # ============================================
 
-CORS_ALLOW_ALL_ORIGINS = True  # ✅ Permitir todos los orígenes en desarrollo
+CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_CREDENTIALS = True
 
-# Para producción, especifica los dominios permitidos:
+# Para producción específica:
 # CORS_ALLOWED_ORIGINS = [
 #     'https://tu-frontend.vercel.app',
 #     'https://tu-dominio.com',
@@ -219,25 +234,25 @@ LOGGING = {
             'class': 'logging.StreamHandler',
             'formatter': 'verbose',
         },
-        'file': {
-            'class': 'logging.FileHandler',
-            'filename': BASE_DIR / 'logs' / 'django.log',
-            'formatter': 'verbose',
-        },
-        'datos_sensor_file': {
-            'class': 'logging.FileHandler',
-            'filename': BASE_DIR / 'logs' / 'datos_sensores.log',
-            'formatter': 'verbose',
-        },
     },
     'loggers': {
         'django': {
-            'handlers': ['console', 'file'],
+            'handlers': ['console'],
             'level': 'INFO',
             'propagate': True,
         },
         'placa': {
-            'handlers': ['console', 'datos_sensor_file'],
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'gunicorn.error': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'gunicorn.access': {
+            'handlers': ['console'],
             'level': 'INFO',
             'propagate': False,
         },
@@ -249,11 +264,33 @@ LOGGING = {
 # ============================================
 
 if not DEBUG:
-    SECURE_SSL_REDIRECT = True
+    # Confiar en proxy headers de Railway
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    USE_X_FORWARDED_HOST = True
+    USE_X_FORWARDED_PORT = True
+    
+    # Seguridad HTTPS
+    SECURE_SSL_REDIRECT = False  # Railway maneja esto
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
     SECURE_BROWSER_XSS_FILTER = True
     SECURE_CONTENT_TYPE_NOSNIFF = True
-    SECURE_HSTS_SECONDS = 31536000
-    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
-    SECURE_HSTS_PRELOAD = True
+    
+    # HSTS (deshabilitado inicialmente, habilitar después de confirmar que funciona)
+    # SECURE_HSTS_SECONDS = 31536000
+    # SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    # SECURE_HSTS_PRELOAD = True
+
+# ============================================
+# CONFIGURACIÓN RAILWAY
+# ============================================
+
+# Imprimir configuración al iniciar
+print("=" * 60)
+print("🔧 Django Configuration:")
+print(f"   DEBUG: {DEBUG}")
+print(f"   ALLOWED_HOSTS: {ALLOWED_HOSTS}")
+print(f"   DATABASE: {'PostgreSQL' if not DATABASE_URL.startswith('sqlite') else 'SQLite'}")
+print(f"   STATIC_ROOT: {STATIC_ROOT}")
+print(f"   PORT: {PORT}")
+print("=" * 60)
