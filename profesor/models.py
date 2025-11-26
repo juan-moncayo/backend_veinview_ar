@@ -4,10 +4,57 @@ from estudiantes.models import Estudiante
 from placa.models import PracticaActiva, DatosSensor
 from django.db.models import Avg, Max, Min, Count, Q
 
+
+class Profesor(models.Model):
+    """
+    Modelo de Profesor que extiende User
+    Cada profesor tiene sus propios estudiantes
+    """
+    user = models.OneToOneField(
+        User, 
+        on_delete=models.CASCADE, 
+        related_name='profesor'
+    )
+    nombre_completo = models.CharField(max_length=200)
+    cedula = models.CharField(max_length=20, unique=True)
+    correo = models.EmailField(unique=True)
+    telefono = models.CharField(max_length=20, blank=True)
+    especialidad = models.CharField(max_length=100, blank=True)
+    activo = models.BooleanField(default=True)
+    fecha_registro = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        verbose_name = "Profesor"
+        verbose_name_plural = "Profesores"
+        ordering = ['nombre_completo']
+    
+    def __str__(self):
+        return f"{self.nombre_completo} ({self.cedula})"
+    
+    def total_estudiantes(self):
+        """Retorna el número total de estudiantes del profesor"""
+        return self.estudiantes.filter(activo=True).count()
+    
+    def practicas_hoy(self):
+        """Retorna las prácticas de hoy de sus estudiantes"""
+        from django.utils import timezone
+        hoy = timezone.now().date()
+        return PracticaActiva.objects.filter(
+            estudiante__profesor=self,
+            fecha_inicio__date=hoy
+        ).count()
+
+
+# ACTUALIZAR: ResumenPractica ahora usa ForeignKey a Profesor (no User)
 class ResumenPractica(models.Model):
     """Resumen y calificación de prácticas finalizadas"""
     practica = models.OneToOneField(PracticaActiva, on_delete=models.CASCADE, related_name='resumen')
-    profesor = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='practicas_evaluadas')
+    profesor = models.ForeignKey(
+        Profesor,  # ✅ CAMBIO: Ahora usa Profesor en lugar de User
+        on_delete=models.SET_NULL, 
+        null=True, 
+        related_name='practicas_evaluadas'
+    )
     
     # Estadísticas calculadas automáticamente
     total_datos_capturados = models.IntegerField(default=0)
@@ -16,7 +63,7 @@ class ResumenPractica(models.Model):
     fuerza_maxima = models.FloatField(null=True, blank=True, help_text="Fuerza máxima (g)")
     fuerza_minima = models.FloatField(null=True, blank=True, help_text="Fuerza mínima (g)")
     
-    # NUEVO: Métricas de desempeño
+    # Métricas de desempeño
     numero_intentos = models.IntegerField(default=0, help_text="Total de intentos realizados")
     intentos_exitosos = models.IntegerField(default=0, help_text="Intentos con técnica correcta")
     precision_porcentaje = models.FloatField(default=0.0, help_text="Precisión general (%)")
@@ -168,10 +215,14 @@ class EncuestaSistema(models.Model):
 
 class ReporteGeneral(models.Model):
     """Reportes generales del sistema con métricas agregadas"""
+    profesor = models.ForeignKey(
+        Profesor,  # ✅ CAMBIO: Ahora usa Profesor
+        on_delete=models.CASCADE,
+        related_name='reportes_generados'
+    )
     titulo = models.CharField(max_length=200, default="Reporte de Desempeño")
     fecha_inicio = models.DateTimeField(help_text="Inicio del período del reporte")
     fecha_fin = models.DateTimeField(help_text="Fin del período del reporte")
-    generado_por = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='reportes_generados')
     
     # Estadísticas generales
     total_estudiantes = models.IntegerField(default=0)
@@ -200,8 +251,9 @@ class ReporteGeneral(models.Model):
     
     def generar_estadisticas(self):
         """Genera todas las estadísticas del reporte"""
-        # Filtrar prácticas en el período
+        # Filtrar prácticas del profesor en el período
         practicas = PracticaActiva.objects.filter(
+            estudiante__profesor=self.profesor,  # ✅ Solo prácticas de sus estudiantes
             fecha_inicio__gte=self.fecha_inicio,
             fecha_inicio__lte=self.fecha_fin,
             estado='finalizada'
@@ -220,7 +272,7 @@ class ReporteGeneral(models.Model):
             
             self.promedio_precision = stats['avg_precision'] or 0.0
             self.promedio_intentos = stats['avg_intentos'] or 0.0
-            self.promedio_tiempo = (stats['avg_tiempo'] or 0) / 60  # Convertir a minutos
+            self.promedio_tiempo = (stats['avg_tiempo'] or 0) / 60
             
             # Total de datos
             self.total_datos_capturados = DatosSensor.objects.filter(

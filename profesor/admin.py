@@ -1,12 +1,46 @@
 from django.contrib import admin
-from .models import ResumenPractica, EncuestaSistema, ReporteGeneral
+from .models import Profesor, ResumenPractica, EncuestaSistema, ReporteGeneral
+
+
+@admin.register(Profesor)
+class ProfesorAdmin(admin.ModelAdmin):
+    list_display = [
+        'cedula',
+        'nombre_completo',
+        'correo',
+        'get_total_estudiantes',
+        'activo',
+        'fecha_registro'
+    ]
+    list_filter = ['activo', 'especialidad', 'fecha_registro']
+    search_fields = ['cedula', 'nombre_completo', 'correo']
+    readonly_fields = ['fecha_registro']
+    
+    fieldsets = (
+        ('Información Personal', {
+            'fields': ('user', 'nombre_completo', 'cedula', 'correo', 'telefono')
+        }),
+        ('Información Profesional', {
+            'fields': ('especialidad', 'activo')
+        }),
+        ('Fechas', {
+            'fields': ('fecha_registro',),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    def get_total_estudiantes(self, obj):
+        """Muestra el total de estudiantes activos del profesor"""
+        return obj.total_estudiantes()
+    get_total_estudiantes.short_description = 'Total Estudiantes'
 
 
 @admin.register(ResumenPractica)
 class ResumenPracticaAdmin(admin.ModelAdmin):
     list_display = [
         'practica', 
-        'get_estudiante', 
+        'get_estudiante',
+        'get_profesor',
         'calificacion', 
         'precision_porcentaje',
         'numero_intentos',
@@ -17,11 +51,13 @@ class ResumenPracticaAdmin(admin.ModelAdmin):
         'tecnica_correcta', 
         'angulo_adecuado', 
         'presion_controlada',
-        'fecha_evaluacion'
+        'fecha_evaluacion',
+        'profesor'
     ]
     search_fields = [
         'practica__estudiante__nombre_completo',
         'practica__estudiante__codigo_estudiante',
+        'profesor__nombre_completo',
         'observaciones'
     ]
     readonly_fields = [
@@ -77,6 +113,10 @@ class ResumenPracticaAdmin(admin.ModelAdmin):
         return obj.practica.estudiante.nombre_completo
     get_estudiante.short_description = 'Estudiante'
     
+    def get_profesor(self, obj):
+        return obj.profesor.nombre_completo if obj.profesor else 'Sin asignar'
+    get_profesor.short_description = 'Profesor'
+    
     def recalcular_estadisticas(self, request, queryset):
         """Acción para recalcular estadísticas de resúmenes seleccionados"""
         for resumen in queryset:
@@ -96,6 +136,7 @@ class ResumenPracticaAdmin(admin.ModelAdmin):
 class EncuestaSistemaAdmin(admin.ModelAdmin):
     list_display = [
         'estudiante',
+        'get_profesor',
         'get_puntuacion_promedio',
         'recomendaria',
         'fecha_respuesta'
@@ -109,6 +150,7 @@ class EncuestaSistemaAdmin(admin.ModelAdmin):
     search_fields = [
         'estudiante__nombre_completo',
         'estudiante__codigo_estudiante',
+        'estudiante__profesor__nombre_completo',
         'aspectos_positivos',
         'aspectos_negativos',
         'sugerencias'
@@ -143,20 +185,25 @@ class EncuestaSistemaAdmin(admin.ModelAdmin):
     def get_puntuacion_promedio(self, obj):
         return f"{obj.puntuacion_promedio:.2f}"
     get_puntuacion_promedio.short_description = 'Puntuación Promedio'
+    
+    def get_profesor(self, obj):
+        return obj.estudiante.profesor.nombre_completo
+    get_profesor.short_description = 'Profesor'
 
 
 @admin.register(ReporteGeneral)
 class ReporteGeneralAdmin(admin.ModelAdmin):
     list_display = [
         'titulo',
+        'get_profesor',
         'get_periodo',
         'total_estudiantes',
         'total_practicas',
         'promedio_precision',
         'fecha_generacion'
     ]
-    list_filter = ['fecha_generacion', 'generado_por']
-    search_fields = ['titulo']
+    list_filter = ['fecha_generacion', 'profesor']
+    search_fields = ['titulo', 'profesor__nombre_completo']
     readonly_fields = [
         'fecha_generacion',
         'total_estudiantes',
@@ -174,9 +221,9 @@ class ReporteGeneralAdmin(admin.ModelAdmin):
         ('Información del Reporte', {
             'fields': (
                 'titulo',
+                'profesor',
                 'fecha_inicio',
                 'fecha_fin',
-                'generado_por',
                 'fecha_generacion'
             )
         }),
@@ -208,6 +255,10 @@ class ReporteGeneralAdmin(admin.ModelAdmin):
     def get_periodo(self, obj):
         return f"{obj.fecha_inicio.strftime('%d/%m/%Y')} - {obj.fecha_fin.strftime('%d/%m/%Y')}"
     get_periodo.short_description = 'Período'
+    
+    def get_profesor(self, obj):
+        return obj.profesor.nombre_completo
+    get_profesor.short_description = 'Profesor'
     
     def regenerar_estadisticas(self, request, queryset):
         """Acción para regenerar estadísticas de reportes seleccionados"""

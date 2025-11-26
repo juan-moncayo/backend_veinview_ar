@@ -1,20 +1,93 @@
 from rest_framework import serializers
-from .models import ResumenPractica, EncuestaSistema, ReporteGeneral
+from django.contrib.auth.models import User
+from .models import Profesor, ResumenPractica, EncuestaSistema, ReporteGeneral
 from placa.models import PracticaActiva, DatosSensor
 from estudiantes.models import Estudiante
+
+
+# ✅ NUEVO: Serializer para Profesor
+class ProfesorSerializer(serializers.ModelSerializer):
+    """Serializer para información del profesor"""
+    username = serializers.CharField(source='user.username', read_only=True)
+    email = serializers.CharField(source='user.email', read_only=True)
+    total_estudiantes = serializers.SerializerMethodField()
+    practicas_hoy = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Profesor
+        fields = [
+            'id',
+            'username',
+            'email',
+            'nombre_completo',
+            'cedula',
+            'correo',
+            'telefono',
+            'especialidad',
+            'activo',
+            'fecha_registro',
+            'total_estudiantes',
+            'practicas_hoy'
+        ]
+        read_only_fields = ['fecha_registro']
+    
+    def get_total_estudiantes(self, obj):
+        return obj.total_estudiantes()
+    
+    def get_practicas_hoy(self, obj):
+        return obj.practicas_hoy()
+
+
+# ✅ NUEVO: Serializer para Login de Profesor
+class ProfesorLoginSerializer(serializers.Serializer):
+    """Serializer para login de profesor"""
+    username = serializers.CharField()
+    password = serializers.CharField(write_only=True)
+
+
+# ✅ NUEVO: Serializer para Registro de Profesor
+class ProfesorRegistroSerializer(serializers.Serializer):
+    """Serializer para registrar nuevo profesor"""
+    username = serializers.CharField(max_length=150)
+    password = serializers.CharField(write_only=True, min_length=6)
+    email = serializers.EmailField()
+    nombre_completo = serializers.CharField(max_length=200)
+    cedula = serializers.CharField(max_length=20)
+    correo = serializers.EmailField()
+    telefono = serializers.CharField(max_length=20, required=False, allow_blank=True)
+    especialidad = serializers.CharField(max_length=100, required=False, allow_blank=True)
+    
+    def validate_username(self, value):
+        """Validar que el username no exista"""
+        if User.objects.filter(username=value).exists():
+            raise serializers.ValidationError("Este nombre de usuario ya existe")
+        return value
+    
+    def validate_cedula(self, value):
+        """Validar que la cédula no exista"""
+        if Profesor.objects.filter(cedula=value).exists():
+            raise serializers.ValidationError("Ya existe un profesor con esta cédula")
+        return value
+    
+    def validate_correo(self, value):
+        """Validar que el correo no exista"""
+        if Profesor.objects.filter(correo=value).exists():
+            raise serializers.ValidationError("Ya existe un profesor con este correo")
+        return value
 
 
 class ResumenPracticaSerializer(serializers.ModelSerializer):
     """Serializer para resúmenes de prácticas"""
     estudiante_nombre = serializers.CharField(source='practica.estudiante.nombre_completo', read_only=True)
     estudiante_codigo = serializers.CharField(source='practica.estudiante.codigo_estudiante', read_only=True)
+    profesor_nombre = serializers.CharField(source='profesor.nombre_completo', read_only=True)
     fecha_practica = serializers.DateTimeField(source='practica.fecha_inicio', read_only=True)
     duracion_minutos = serializers.SerializerMethodField()
     
     class Meta:
         model = ResumenPractica
         fields = [
-            'id', 'practica', 'profesor',
+            'id', 'practica', 'profesor', 'profesor_nombre',
             'estudiante_nombre', 'estudiante_codigo', 'fecha_practica',
             'total_datos_capturados', 'inclinacion_promedio', 
             'fuerza_promedio', 'fuerza_maxima', 'fuerza_minima',
@@ -56,12 +129,13 @@ class ResumenPracticaCreateSerializer(serializers.Serializer):
 class EncuestaSistemaSerializer(serializers.ModelSerializer):
     """Serializer para encuestas del sistema"""
     estudiante_nombre = serializers.CharField(source='estudiante.nombre_completo', read_only=True)
+    profesor_nombre = serializers.CharField(source='estudiante.profesor.nombre_completo', read_only=True)
     puntuacion_promedio = serializers.ReadOnlyField()
     
     class Meta:
         model = EncuestaSistema
         fields = [
-            'id', 'estudiante', 'estudiante_nombre', 'practica',
+            'id', 'estudiante', 'estudiante_nombre', 'profesor_nombre', 'practica',
             'facilidad_uso', 'utilidad_sistema', 'precision_sensores',
             'interfaz_clara', 'mejora_aprendizaje',
             'aspectos_positivos', 'aspectos_negativos', 'sugerencias',
@@ -107,14 +181,14 @@ class EncuestaSistemaCreateSerializer(serializers.Serializer):
 
 class ReporteGeneralSerializer(serializers.ModelSerializer):
     """Serializer para reportes generales"""
-    generado_por_nombre = serializers.CharField(source='generado_por.get_full_name', read_only=True)
+    profesor_nombre = serializers.CharField(source='profesor.nombre_completo', read_only=True)
     periodo = serializers.SerializerMethodField()
     
     class Meta:
         model = ReporteGeneral
         fields = [
-            'id', 'titulo', 'fecha_inicio', 'fecha_fin', 'periodo',
-            'generado_por', 'generado_por_nombre',
+            'id', 'titulo', 'profesor', 'profesor_nombre',
+            'fecha_inicio', 'fecha_fin', 'periodo',
             'total_estudiantes', 'total_practicas', 'total_datos_capturados',
             'promedio_precision', 'promedio_intentos', 'promedio_tiempo',
             'promedio_calificacion', 'promedio_satisfaccion', 'total_encuestas',
@@ -177,6 +251,9 @@ class MetricasTiempoRealSerializer(serializers.Serializer):
 
 class DashboardProfesorSerializer(serializers.Serializer):
     """Serializer para dashboard del profesor con todas las métricas"""
+    # Información del profesor
+    profesor = ProfesorSerializer()
+    
     # Estadísticas generales
     total_estudiantes_activos = serializers.IntegerField()
     total_practicas_hoy = serializers.IntegerField()

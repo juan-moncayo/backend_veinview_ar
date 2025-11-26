@@ -70,3 +70,59 @@ Thumbs.db
 # Environment files
 .env
 .env.* 
+
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+
+# Django
+*.log
+db.sqlite3
+db.sqlite3-journal
+/staticfiles/
+/media/
+
+# Variables de entorno
+.env
+.env.local
+.env.railway
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+```
+
+---
+
+## **PASO 6: Crear archivo `Procfile` para Railway**
+
+**Crear archivo: `Procfile`** (en la raíz del proyecto, sin extensión)
+```
+web: gunicorn config.wsgi --log-file -
+release: python manage.py migrate --noinput
+```
+
+---
+
+## **PASO 7: Crear archivo `runtime.txt`**
+
+**Crear archivo: `runtime.txt`** (en la raíz del proyecto)
+```
+python-3.11.0

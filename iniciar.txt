@@ -1,3 +1,5 @@
+cd backend_veinview_ar
+
 venv\Scripts\activate
 
 python manage.py runserver 0.0.0.0:8000

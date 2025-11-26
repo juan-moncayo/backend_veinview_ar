@@ -1,18 +1,24 @@
-# config/settings.py
-
 from pathlib import Path
 from decouple import config
+import dj_database_url
 import os
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = 'django-insecure-mosc2bzzdpp-ci5zxj*0-kwu6&0rw3v_-i-7a^i1(_8aus9=c$'
+# ============================================
+# CONFIGURACIÓN DE SEGURIDAD
+# ============================================
+
+SECRET_KEY = config('SECRET_KEY', default='django-insecure-mosc2bzzdpp-ci5zxj*0-kwu6&0rw3v_-i-7a^i1(_8aus9=c$')
 
 DEBUG = config('DEBUG', default=True, cast=bool)
 
-ALLOWED_HOSTS = ['*']  # Cambiar en producción
+ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1').split(',')
 
-# Application definition
+# ============================================
+# APLICACIONES INSTALADAS
+# ============================================
+
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
@@ -34,9 +40,14 @@ INSTALLED_APPS = [
     'RA.apps.RAConfig',
 ]
 
+# ============================================
+# MIDDLEWARE
+# ============================================
+
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
-    'corsheaders.middleware.CorsMiddleware',  # CORS debe ir antes de CommonMiddleware
+    'whitenoise.middleware.WhiteNoiseMiddleware',  # ✅ Para servir archivos estáticos
+    'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -46,6 +57,10 @@ MIDDLEWARE = [
 ]
 
 ROOT_URLCONF = 'config.urls'
+
+# ============================================
+# TEMPLATES
+# ============================================
 
 TEMPLATES = [
     {
@@ -65,15 +80,33 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'config.wsgi.application'
 
-# Database
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
-    }
-}
+# ============================================
+# CONFIGURACIÓN DE BASE DE DATOS
+# ============================================
 
-# Password validation
+# Obtener DATABASE_URL desde .env
+DATABASE_URL = config('DATABASE_URL', default='sqlite:///db.sqlite3')
+
+if DATABASE_URL.startswith('sqlite'):
+    # Usar SQLite (desarrollo local)
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
+    print("✅ Usando SQLite (desarrollo local)")
+else:
+    # Usar PostgreSQL (Railway)
+    DATABASES = {
+        'default': dj_database_url.parse(DATABASE_URL)
+    }
+    print("✅ Usando PostgreSQL (Railway)")
+
+# ============================================
+# PASSWORD VALIDATION
+# ============================================
+
 AUTH_PASSWORD_VALIDATORS = [
     {
         'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
@@ -89,24 +122,42 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
-# Internationalization
+# ============================================
+# INTERNACIONALIZACIÓN
+# ============================================
+
 LANGUAGE_CODE = 'es-co'
 TIME_ZONE = 'America/Bogota'
 USE_I18N = True
 USE_TZ = True
 
-# Static files
+# ============================================
+# ARCHIVOS ESTÁTICOS
+# ============================================
+
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
-# Media files
+# Configuración de WhiteNoise para servir archivos estáticos
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+
+# ============================================
+# ARCHIVOS MEDIA
+# ============================================
+
 MEDIA_URL = 'media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
-# Default primary key field type
+# ============================================
+# DEFAULT PRIMARY KEY
+# ============================================
+
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# REST Framework Configuration
+# ============================================
+# REST FRAMEWORK
+# ============================================
+
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
@@ -120,7 +171,10 @@ REST_FRAMEWORK = {
     'DATETIME_FORMAT': '%Y-%m-%d %H:%M:%S',
 }
 
-# JWT Configuration
+# ============================================
+# JWT CONFIGURATION
+# ============================================
+
 from datetime import timedelta
 
 SIMPLE_JWT = {
@@ -130,14 +184,76 @@ SIMPLE_JWT = {
     'BLACKLIST_AFTER_ROTATION': True,
 }
 
-# CORS Configuration
-CORS_ALLOW_ALL_ORIGINS = True  # Cambiar en producción
+# ============================================
+# CORS CONFIGURATION
+# ============================================
+
+CORS_ALLOW_ALL_ORIGINS = True  # ✅ Permitir todos los orígenes en desarrollo
 CORS_ALLOW_CREDENTIALS = True
 
-# Security Settings para HTTPS
+# Para producción, especifica los dominios permitidos:
+# CORS_ALLOWED_ORIGINS = [
+#     'https://tu-frontend.vercel.app',
+#     'https://tu-dominio.com',
+# ]
+
+# ============================================
+# LOGGING CONFIGURATION
+# ============================================
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '[{levelname}] {asctime} {module} {message}',
+            'style': '{',
+        },
+        'simple': {
+            'format': '{levelname} {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'verbose',
+        },
+        'file': {
+            'class': 'logging.FileHandler',
+            'filename': BASE_DIR / 'logs' / 'django.log',
+            'formatter': 'verbose',
+        },
+        'datos_sensor_file': {
+            'class': 'logging.FileHandler',
+            'filename': BASE_DIR / 'logs' / 'datos_sensores.log',
+            'formatter': 'verbose',
+        },
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['console', 'file'],
+            'level': 'INFO',
+            'propagate': True,
+        },
+        'placa': {
+            'handlers': ['console', 'datos_sensor_file'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+    },
+}
+
+# ============================================
+# CONFIGURACIÓN DE SEGURIDAD (PRODUCCIÓN)
+# ============================================
+
 if not DEBUG:
     SECURE_SSL_REDIRECT = True
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
     SECURE_BROWSER_XSS_FILTER = True
     SECURE_CONTENT_TYPE_NOSNIFF = True
+    SECURE_HSTS_SECONDS = 31536000
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True

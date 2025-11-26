@@ -1,9 +1,10 @@
-from rest_framework import status
+from rest_framework import status, viewsets
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
+import logging
 
 from .models import DispositivoESP32, PracticaActiva, DatosSensor
 from .serializers import (
@@ -12,6 +13,10 @@ from .serializers import (
     DatosSensorSerializer,
     DatosSensorCreateSerializer
 )
+from estudiantes.models import Estudiante
+
+# ✅ CONFIGURAR LOGGING
+logger = logging.getLogger('placa')
 
 
 def get_client_ip(request):
@@ -159,9 +164,21 @@ def enviar_datos_sensores(request):
         "fuerza": 250.5, "presion": 0.5
     }
     """
+    # ✅ LOG DE INICIO
+    logger.info("=" * 80)
+    logger.info("🔵 RECIBIENDO DATOS DE SENSORES")
+    logger.info("=" * 80)
+    logger.info(f"📥 Request Method: {request.method}")
+    logger.info(f"📥 Request Headers: {dict(request.headers)}")
+    logger.info(f"📥 Request Body: {request.data}")
+    logger.info(f"📥 IP Cliente: {get_client_ip(request)}")
+    
     dispositivo, error_response = verificar_api_key(request)
     if error_response:
+        logger.error(f"❌ Error en API Key: {error_response.data}")
         return error_response
+    
+    logger.info(f"✅ Dispositivo verificado: {dispositivo.nombre} (ID: {dispositivo.id})")
     
     # Verificar que haya una práctica activa
     practica_activa = PracticaActiva.objects.filter(
@@ -170,45 +187,97 @@ def enviar_datos_sensores(request):
     ).first()
     
     if not practica_activa:
+        logger.warning(f"⚠️  No hay práctica activa para dispositivo {dispositivo.nombre}")
         return Response({
             'error': 'No hay práctica activa o está pausada',
             'puede_enviar_datos': False
         }, status=status.HTTP_400_BAD_REQUEST)
     
+    logger.info(f"✅ Práctica activa encontrada:")
+    logger.info(f"   📋 Práctica ID: {practica_activa.id}")
+    logger.info(f"   👤 Estudiante: {practica_activa.estudiante.nombre_completo}")
+    logger.info(f"   📊 Estado: {practica_activa.estado}")
+    
     # Validar datos
     serializer = DatosSensorCreateSerializer(data=request.data)
     if not serializer.is_valid():
+        logger.error(f"❌ Datos inválidos: {serializer.errors}")
         return Response({
             'error': 'Datos inválidos',
             'detalles': serializer.errors
         }, status=status.HTTP_400_BAD_REQUEST)
     
+    logger.info("✅ Datos validados correctamente")
+    
     # Guardar datos
     datos = serializer.validated_data
-    dato_sensor = DatosSensor.objects.create(
-        practica=practica_activa,
-        dispositivo=dispositivo,
-        aceleracion_x=datos['ax'],
-        aceleracion_y=datos['ay'],
-        aceleracion_z=datos['az'],
-        giroscopio_x=datos['gx'],
-        giroscopio_y=datos['gy'],
-        giroscopio_z=datos['gz'],
-        angulo_pitch=datos['pitch'],
-        angulo_roll=datos['roll'],
-        angulo_yaw=datos['yaw'],
-        fuerza=datos['fuerza'],
-        presion=datos.get('presion'),
-        ip_origen=get_client_ip(request)
-    )
     
-    return Response({
-        'status': 'ok',
-        'message': 'Datos guardados exitosamente',
-        'dato_id': dato_sensor.id,
-        'practica_id': practica_activa.id,
-        'estudiante': practica_activa.estudiante.nombre_completo
-    }, status=status.HTTP_201_CREATED)
+    try:
+        logger.info("💾 Guardando dato en base de datos...")
+        
+        dato_sensor = DatosSensor.objects.create(
+            practica=practica_activa,
+            dispositivo=dispositivo,
+            aceleracion_x=datos['ax'],
+            aceleracion_y=datos['ay'],
+            aceleracion_z=datos['az'],
+            giroscopio_x=datos['gx'],
+            giroscopio_y=datos['gy'],
+            giroscopio_z=datos['gz'],
+            angulo_pitch=datos['pitch'],
+            angulo_roll=datos['roll'],
+            angulo_yaw=datos['yaw'],
+            fuerza=datos['fuerza'],
+            presion=datos.get('presion'),
+            ip_origen=get_client_ip(request)
+        )
+        
+        logger.info("=" * 80)
+        logger.info("✅✅✅ DATO GUARDADO EXITOSAMENTE ✅✅✅")
+        logger.info("=" * 80)
+        logger.info(f"   🆔 ID del dato: {dato_sensor.id}")
+        logger.info(f"   📋 Práctica ID: {practica_activa.id}")
+        logger.info(f"   👤 Estudiante: {practica_activa.estudiante.nombre_completo}")
+        logger.info(f"   📐 Pitch: {dato_sensor.angulo_pitch}°")
+        logger.info(f"   📐 Roll: {dato_sensor.angulo_roll}°")
+        logger.info(f"   📐 Yaw: {dato_sensor.angulo_yaw}°")
+        logger.info(f"   💪 Fuerza: {dato_sensor.fuerza}g")
+        logger.info(f"   ✅ Técnica correcta: {dato_sensor.tecnica_correcta}")
+        logger.info(f"   🕐 Timestamp: {dato_sensor.timestamp}")
+        
+        # Verificar que se guardó
+        verificacion = DatosSensor.objects.filter(id=dato_sensor.id).exists()
+        logger.info(f"   🔍 Verificación en BD: {'✅ EXISTE' if verificacion else '❌ NO EXISTE'}")
+        
+        # Contar total de datos de esta práctica
+        total_datos = DatosSensor.objects.filter(practica=practica_activa).count()
+        logger.info(f"   📊 Total datos en esta práctica: {total_datos}")
+        logger.info("=" * 80)
+        
+        return Response({
+            'status': 'ok',
+            'message': 'Datos guardados exitosamente',
+            'dato_id': dato_sensor.id,
+            'practica_id': practica_activa.id,
+            'estudiante': practica_activa.estudiante.nombre_completo,
+            'tecnica_correcta': dato_sensor.tecnica_correcta,
+            'total_datos_practica': total_datos
+        }, status=status.HTTP_201_CREATED)
+        
+    except Exception as e:
+        logger.error("=" * 80)
+        logger.error("❌❌❌ ERROR AL GUARDAR DATO ❌❌❌")
+        logger.error("=" * 80)
+        logger.error(f"   ⚠️  Excepción: {str(e)}")
+        logger.error(f"   ⚠️  Tipo: {type(e).__name__}")
+        import traceback
+        logger.error(f"   📋 Traceback: {traceback.format_exc()}")
+        logger.error("=" * 80)
+        
+        return Response({
+            'error': 'Error al guardar datos',
+            'detalle': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @csrf_exempt
@@ -247,15 +316,9 @@ def estado_sistema(request):
 
 
 # ============================================
-# AGREGAR AL FINAL DE TU placa/views.py ACTUAL
-# NO BORRES NADA DE LO QUE YA TIENES
+# VIEWSETS PARA GESTIÓN WEB
 # ============================================
 
-from rest_framework import viewsets
-from estudiantes.models import Estudiante
-from estudiantes.serializers import EstudianteSerializer
-
-# ViewSet para listar dispositivos ESP32
 class DispositivoESP32ViewSet(viewsets.ReadOnlyModelViewSet):
     """
     ViewSet para listar dispositivos ESP32
@@ -266,7 +329,6 @@ class DispositivoESP32ViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [AllowAny]
 
 
-# ViewSet para gestionar prácticas
 class PracticaActivaViewSet(viewsets.ModelViewSet):
     """
     ViewSet para crear y actualizar prácticas
@@ -310,6 +372,8 @@ class PracticaActivaViewSet(viewsets.ModelViewSet):
             estado='iniciada'
         )
         
+        logger.info(f"✅ Práctica creada: ID {practica.id}, Estudiante: {estudiante.nombre_completo}")
+        
         serializer = self.get_serializer(practica)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
     
@@ -324,6 +388,8 @@ class PracticaActivaViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
+        estado_anterior = practica.estado
+        
         # Actualizar estado usando el método del modelo
         if nuevo_estado == 'pausada' and practica.estado == 'iniciada':
             practica.pausar()
@@ -335,11 +401,12 @@ class PracticaActivaViewSet(viewsets.ModelViewSet):
             practica.estado = nuevo_estado
             practica.save()
         
+        logger.info(f"🔄 Práctica {practica.id} cambió de estado: {estado_anterior} → {nuevo_estado}")
+        
         serializer = self.get_serializer(practica)
         return Response(serializer.data)
 
 
-# ViewSet para listar datos de sensores
 class DatosSensorViewSet(viewsets.ReadOnlyModelViewSet):
     """
     ViewSet para listar datos de sensores

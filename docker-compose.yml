@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: veinview_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres123
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  web:
+    build: .
+    command: >
+      sh -c "python manage.py migrate &&
+             python manage.py runserver 0.0.0.0:8000"
+    volumes:
+      - .:/app
+    ports:
+      - "8000:8000"
+    environment:
+      - DEBUG=True
+      - DATABASE_URL=postgresql://postgres:postgres123@db:5432/veinview_db
+      - SECRET_KEY=django-insecure-mosc2bzzdpp-ci5zxj*0-kwu6&0rw3v_-i-7a^i1(_8aus9=c$
+      - ALLOWED_HOSTS=*
+    depends_on:
+      - db
+
+volumes:
+  postgres_data:
