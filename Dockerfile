@@ -26,11 +26,12 @@ COPY . .
 RUN mkdir -p logs staticfiles media
 
 # Recolectar archivos estáticos
-RUN python manage.py collectstatic --noinput
+RUN python manage.py collectstatic --noinput || true
 
-# Exponer puerto
-EXPOSE 8000
+# Exponer puerto (Railway usa PORT dinámico)
+EXPOSE $PORT
 
 # Script de inicio que ejecuta migraciones automáticamente
+# Railway proporciona $PORT automáticamente
 CMD python manage.py migrate --noinput && \
-    gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 3 --timeout 120
+    gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --workers 3 --timeout 120 --access-logfile - --error-logfile -
