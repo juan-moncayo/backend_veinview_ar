@@ -34,33 +34,3 @@ EXPOSE 8000
 # Script de inicio que ejecuta migraciones automáticamente
 CMD python manage.py migrate --noinput && \
     gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 3 --timeout 120
-```
-
----
-
-## **PASO 2: Crear `.dockerignore`**
-
-**Crear archivo: `.dockerignore`** (en la raíz del proyecto)
-```
-__pycache__
-*.pyc
-*.pyo
-*.pyd
-.Python
-venv/
-env/
-ENV/
-db.sqlite3
-*.log
-.git
-.gitignore
-.dockerignore
-.vscode/
-.idea/
-*.swp
-*.swo
-.DS_Store
-Thumbs.db
-logs/
-staticfiles/
-media/
