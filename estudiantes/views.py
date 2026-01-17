@@ -15,11 +15,6 @@ from profesor.models import Profesor
 class EstudianteViewSet(viewsets.ModelViewSet):
     """
     ViewSet para gestionar estudiantes
-    GET /api/estudiantes/ - Listar estudiantes
-    POST /api/estudiantes/ - Crear estudiante
-    GET /api/estudiantes/{id}/ - Ver detalle
-    PATCH /api/estudiantes/{id}/ - Actualizar estudiante
-    DELETE /api/estudiantes/{id}/ - Eliminar estudiante
     """
     queryset = Estudiante.objects.select_related('profesor', 'user').all()
     serializer_class = EstudianteSerializer
@@ -44,55 +39,91 @@ class EstudianteViewSet(viewsets.ModelViewSet):
     
     def create(self, request, *args, **kwargs):
         """
-        ✅ VERSIÓN CORRECTA:
         Crear estudiante y asignar automáticamente al profesor autenticado
         """
+        print("=" * 80)
+        print("🔵 INICIO - Crear Estudiante")
+        print("=" * 80)
+        
+        # 🔍 DEBUG: Información del request
+        print(f"📋 Request User: {request.user}")
+        print(f"📋 Is Authenticated: {request.user.is_authenticated}")
+        print(f"📋 Username: {request.user.username if request.user.is_authenticated else 'AnonymousUser'}")
+        print(f"📋 Headers: {dict(request.headers)}")
+        
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         
         # ✅ OBTENER PROFESOR AUTENTICADO
         profesor = None
         
-        # Si el usuario está autenticado y es profesor, usarlo automáticamente
+        # CASO 1: Usuario autenticado
         if request.user.is_authenticated:
+            print(f"✅ Usuario autenticado: {request.user.username}")
+            
             try:
                 profesor = Profesor.objects.get(user=request.user)
-                print(f"✅ Profesor autenticado encontrado: {profesor.nombre_completo}")
+                print(f"✅ Profesor encontrado: {profesor.nombre_completo} (ID: {profesor.id})")
             except Profesor.DoesNotExist:
-                print(f"⚠️ Usuario autenticado pero no es profesor: {request.user.username}")
-                # Si está autenticado pero no es profesor, intentar obtener de profesor_id
+                print(f"⚠️ Usuario '{request.user.username}' no tiene perfil de Profesor")
+                
+                # Intentar con profesor_id del request
                 profesor_id = serializer.validated_data.get('profesor_id')
                 if profesor_id:
+                    print(f"🔄 Intentando con profesor_id del request: {profesor_id}")
                     try:
                         profesor = Profesor.objects.get(id=profesor_id)
+                        print(f"✅ Profesor obtenido por ID: {profesor.nombre_completo}")
                     except Profesor.DoesNotExist:
+                        print(f"❌ Profesor con ID {profesor_id} no existe")
                         return Response(
-                            {'error': 'Profesor no encontrado'},
+                            {'error': f'Profesor con ID {profesor_id} no encontrado'},
                             status=status.HTTP_404_NOT_FOUND
                         )
         else:
-            # Si NO está autenticado, usar profesor_id del request
+            # CASO 2: Usuario NO autenticado
+            print("⚠️ Usuario NO autenticado (AnonymousUser)")
+            
             profesor_id = serializer.validated_data.get('profesor_id')
             if profesor_id:
+                print(f"🔄 Intentando con profesor_id del request: {profesor_id}")
                 try:
                     profesor = Profesor.objects.get(id=profesor_id)
+                    print(f"✅ Profesor obtenido por ID: {profesor.nombre_completo}")
                 except Profesor.DoesNotExist:
+                    print(f"❌ Profesor con ID {profesor_id} no existe")
                     return Response(
-                        {'error': 'Profesor no encontrado'},
+                        {'error': f'Profesor con ID {profesor_id} no encontrado'},
                         status=status.HTTP_404_NOT_FOUND
                     )
+            else:
+                print("❌ No hay profesor_id en el request")
         
-        # ⚠️ Si después de todo NO hay profesor, retornar error
+        # ⚠️ Validación final
         if not profesor:
+            print("=" * 80)
+            print("❌ ERROR FINAL: No se pudo determinar el profesor")
+            print("=" * 80)
             return Response(
-                {'error': 'No se pudo determinar el profesor. Asegúrate de estar autenticado como profesor.'},
+                {
+                    'error': 'No se pudo determinar el profesor. Asegúrate de estar autenticado como profesor.',
+                    'debug': {
+                        'is_authenticated': request.user.is_authenticated,
+                        'username': request.user.username if request.user.is_authenticated else None,
+                        'tiene_profesor_id': 'profesor_id' in serializer.validated_data
+                    }
+                },
                 status=status.HTTP_400_BAD_REQUEST
             )
+        
+        print(f"✅ PROFESOR ASIGNADO: {profesor.nombre_completo} (ID: {profesor.id})")
         
         # Crear usuario automáticamente
         username = serializer.validated_data['codigo_estudiante']
         email = serializer.validated_data['correo']
         nombre = serializer.validated_data['nombre_completo']
+        
+        print(f"📝 Creando usuario: {username}")
         
         # Verificar si el usuario ya existe
         try:
@@ -104,17 +135,21 @@ class EstudianteViewSet(viewsets.ModelViewSet):
             )
             print(f"✅ Usuario creado: {username}")
         except Exception as e:
+            print(f"⚠️ Error creando usuario: {str(e)}")
             # Si el usuario ya existe, buscar un estudiante existente
             try:
                 estudiante_existente = Estudiante.objects.get(
                     codigo_estudiante=username
                 )
                 print(f"⚠️ Estudiante ya existe: {username}")
+                print("=" * 80)
                 return Response(
                     EstudianteSerializer(estudiante_existente).data,
                     status=status.HTTP_200_OK
                 )
             except Estudiante.DoesNotExist:
+                print(f"❌ Usuario existe pero estudiante no: {username}")
+                print("=" * 80)
                 return Response(
                     {'error': f'Error creando usuario: {str(e)}'},
                     status=status.HTTP_400_BAD_REQUEST
@@ -123,7 +158,7 @@ class EstudianteViewSet(viewsets.ModelViewSet):
         # ✅ Crear estudiante con profesor asignado
         estudiante = Estudiante.objects.create(
             user=user,
-            profesor=profesor,  # ✅ SIEMPRE tiene profesor
+            profesor=profesor,
             codigo_estudiante=serializer.validated_data['codigo_estudiante'],
             nombre_completo=serializer.validated_data['nombre_completo'],
             correo=serializer.validated_data['correo'],
@@ -133,8 +168,12 @@ class EstudianteViewSet(viewsets.ModelViewSet):
             activo=True
         )
         
-        print(f"✅ Estudiante creado exitosamente: {estudiante.nombre_completo}")
-        print(f"   Profesor asignado: {profesor.nombre_completo}")
+        print(f"✅ Estudiante creado exitosamente:")
+        print(f"   ID: {estudiante.id}")
+        print(f"   Nombre: {estudiante.nombre_completo}")
+        print(f"   Código: {estudiante.codigo_estudiante}")
+        print(f"   Profesor: {profesor.nombre_completo}")
+        print("=" * 80)
         
         return Response(
             EstudianteSerializer(estudiante).data,
