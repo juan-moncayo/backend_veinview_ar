@@ -40,8 +40,11 @@ class EstudianteSerializer(serializers.ModelSerializer):
 
 
 class EstudianteCreateSerializer(serializers.Serializer):
-    """Serializer simplificado para crear estudiantes desde el frontend"""
-    profesor_id = serializers.IntegerField()
+    """
+    Serializer simplificado para crear estudiantes desde el frontend
+    ✅ profesor_id es opcional porque se asigna automáticamente del usuario autenticado
+    """
+    profesor_id = serializers.IntegerField(required=False, allow_null=True)
     codigo_estudiante = serializers.CharField(max_length=20)
     nombre_completo = serializers.CharField(max_length=200)
     correo = serializers.EmailField()
@@ -50,7 +53,11 @@ class EstudianteCreateSerializer(serializers.Serializer):
     telefono = serializers.CharField(max_length=20, required=False, allow_blank=True)
     
     def validate_profesor_id(self, value):
-        """Validar que el profesor existe"""
+        """Validar que el profesor existe (si se proporciona)"""
+        # ✅ CAMBIO: Permitir None
+        if value is None:
+            return value
+            
         from profesor.models import Profesor
         try:
             Profesor.objects.get(id=value)
