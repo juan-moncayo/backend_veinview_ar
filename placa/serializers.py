@@ -47,7 +47,7 @@ class DatosSensorSerializer(serializers.ModelSerializer):
             'aceleracion_x', 'aceleracion_y', 'aceleracion_z',
             'giroscopio_x', 'giroscopio_y', 'giroscopio_z',
             'angulo_pitch', 'angulo_roll', 'angulo_yaw',
-            'fuerza', 'presion', 'timestamp'
+            'fuerza', 'presion', 'timestamp', 'tecnica_correcta'
         ]
         read_only_fields = ['timestamp']
 
