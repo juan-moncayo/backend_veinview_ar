@@ -46,7 +46,7 @@ class PracticaActiva(models.Model):
     
     duracion_total_segundos = models.IntegerField(default=0, help_text="Duración acumulada en segundos")
     
-    # NUEVO: Métricas de desempeño
+    # Métricas de desempeño
     numero_intentos = models.IntegerField(default=0, help_text="Número de intentos de canalización")
     intentos_exitosos = models.IntegerField(default=0, help_text="Intentos con técnica correcta")
     precision_promedio = models.FloatField(default=0.0, help_text="Precisión promedio (%)")
@@ -92,27 +92,52 @@ class PracticaActiva(models.Model):
             self.estado = 'finalizada'
             self.fecha_fin = ahora
             
-            # Calcular métricas finales
+            # ✅ CALCULAR MÉTRICAS FINALES ANTES DE GUARDAR
             self.calcular_metricas()
+            
+            # Guardar con las métricas actualizadas
             self.save()
     
     def calcular_metricas(self):
-        """Calcula métricas de desempeño de la práctica"""
-        datos = self.datos_sensores.all()
+        """
+        Calcula métricas de desempeño de la práctica.
+        """
+        datos = DatosSensor.objects.filter(practica=self)
+        
         if datos.exists():
-            # Calcular precisión basada en ángulos y fuerza
             total_datos = datos.count()
-            datos_correctos = datos.filter(
-                angulo_pitch__gte=10,
-                angulo_pitch__lte=30,
-                fuerza__gte=50,
-                fuerza__lte=300
-            ).count()
             
+            # ✅ Calcular precisión
+            datos_correctos = datos.filter(tecnica_correcta=True).count()
             self.precision_promedio = (datos_correctos / total_datos * 100) if total_datos > 0 else 0
-    
+            
+            # ✅ NUEVA LÓGICA DE INTENTOS - Más flexible
+            if total_datos >= 10:
+                # Si hay muchos datos, usar ventanas de 5
+                DATOS_POR_INTENTO = 5
+                self.numero_intentos = total_datos // DATOS_POR_INTENTO
+            elif total_datos >= 5:
+                # Entre 5-9 datos = 1 intento
+                self.numero_intentos = 1
+            else:
+                # Menos de 5 datos = 1 intento también (práctica corta pero válida)
+                self.numero_intentos = 1
+            
+            # ✅ Calcular intentos exitosos
+            proporcion_exito = datos_correctos / total_datos if total_datos > 0 else 0
+            self.intentos_exitosos = int(self.numero_intentos * proporcion_exito)
+            
+            # Asegurar que si la precisión es 100%, al menos 1 intento sea exitoso
+            if self.precision_promedio == 100.0 and self.intentos_exitosos == 0:
+                self.intentos_exitosos = 1
+        else:
+            # Sin datos
+            self.precision_promedio = 0.0
+            self.numero_intentos = 0
+            self.intentos_exitosos = 0
+        
     def registrar_intento(self, exitoso=False):
-        """Registra un nuevo intento de canalización"""
+        """Registra un nuevo intento de canalización (llamada manual)"""
         self.numero_intentos += 1
         if exitoso:
             self.intentos_exitosos += 1
@@ -145,7 +170,7 @@ class DatosSensor(models.Model):
     timestamp = models.DateTimeField(auto_now_add=True, db_index=True)
     ip_origen = models.GenericIPAddressField(null=True, blank=True)
     
-    # NUEVO: Indicador de técnica correcta
+    # Indicador de técnica correcta
     tecnica_correcta = models.BooleanField(default=False, help_text="¿Datos dentro de rango óptimo?")
     
     class Meta:
