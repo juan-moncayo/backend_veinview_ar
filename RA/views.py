@@ -6,6 +6,7 @@ from django.utils import timezone
 from django.db.models import Avg, Count, Q
 from datetime import timedelta
 import time
+from django.shortcuts import render
 
 from .models import SesionRA, DatosVisualizacionRA, ConfiguracionRA, EventoRA
 from .serializers import (
@@ -853,3 +854,6 @@ class EventoRAViewSet(viewsets.ReadOnlyModelViewSet):
             queryset = queryset.filter(sesion_id=sesion_id)
         
         return queryset.order_by('-timestamp')
+
+    def dashboard_view(request):
+    return render(request, 'dashboard.html')

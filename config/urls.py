@@ -1,6 +1,7 @@
 from django.contrib import admin
 from django.urls import path, include
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+from RA.views import dashboard_view
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -14,4 +15,5 @@ urlpatterns = [
     path('api/estudiantes/', include('estudiantes.urls')),
     path('api/profesor/', include('profesor.urls')), 
     path('api/ra/', include('RA.urls')),  
+    path('dashboard/', dashboard_view),
 ]
