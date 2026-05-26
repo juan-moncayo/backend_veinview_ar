@@ -11,11 +11,12 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = config('SECRET_KEY', default='django-insecure-mosc2bzzdpp-ci5zxj*0-kwu6&0rw3v_-i-7a^i1(_8aus9=c$')
 DEBUG = config('DEBUG', default=True, cast=bool)
 
-ALLOWED_HOSTS_ENV = config('ALLOWED_HOSTS', default='localhost,127.0.0.1')
-if ALLOWED_HOSTS_ENV == '*':
-    ALLOWED_HOSTS = ['*']
-else:
-    ALLOWED_HOSTS = ALLOWED_HOSTS_ENV.split(',')
+ALLOWED_HOSTS = [
+    'localhost',
+    '127.0.0.1',
+    '192.168.0.17',
+    '*'
+]
 
 INSTALLED_APPS = [
     'django.contrib.admin',

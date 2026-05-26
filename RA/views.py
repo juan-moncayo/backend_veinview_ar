@@ -5,8 +5,10 @@ from rest_framework.response import Response
 from django.utils import timezone
 from django.db.models import Avg, Count, Q
 from datetime import timedelta
-import time
 from django.shortcuts import render
+import time
+
+
 
 from .models import SesionRA, DatosVisualizacionRA, ConfiguracionRA, EventoRA
 from .serializers import (
@@ -839,21 +841,21 @@ class ConfiguracionRAViewSet(viewsets.ModelViewSet):
         
         return Response(self.get_serializer(config).data)
 
-
 class EventoRAViewSet(viewsets.ReadOnlyModelViewSet):
     """ViewSet para ver eventos RA (solo lectura)"""
     queryset = EventoRA.objects.select_related('sesion').all()
     serializer_class = EventoRASerializer
     permission_classes = [AllowAny]
-    
+
     def get_queryset(self):
         queryset = EventoRA.objects.all()
         sesion_id = self.request.query_params.get('sesion_id')
-        
+
         if sesion_id:
             queryset = queryset.filter(sesion_id=sesion_id)
-        
+
         return queryset.order_by('-timestamp')
 
-    def dashboard_view(request):
+
+def dashboard_view(request):
     return render(request, 'dashboard.html')
