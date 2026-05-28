@@ -13,9 +13,6 @@ from profesor.models import Profesor
 
 
 class EstudianteViewSet(viewsets.ModelViewSet):
-    """
-    ViewSet para gestionar estudiantes
-    """
     queryset = Estudiante.objects.select_related('profesor', 'user').all()
     serializer_class = EstudianteSerializer
     permission_classes = [AllowAny]
@@ -32,18 +29,20 @@ class EstudianteViewSet(viewsets.ModelViewSet):
         profesor_id = self.request.query_params.get('profesor_id')
         if profesor_id:
             queryset = queryset.filter(profesor_id=profesor_id)
+        search = self.request.query_params.get('search')
+        if search:
+            queryset = queryset.filter(
+                nombre_completo__icontains=search
+            ) | queryset.filter(
+                codigo_estudiante__icontains=search
+            )
         return queryset
 
     def create(self, request, *args, **kwargs):
-        """
-        Crear estudiante y usuario automáticamente.
-        - username del User = correo del estudiante  ← para login con correo
-        - password del User = codigo_estudiante       ← ID universitario
-        """
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        # ── Determinar profesor ──────────────────────────────────────────
+        # Determinar profesor
         profesor = None
 
         if request.user.is_authenticated:
@@ -74,37 +73,40 @@ class EstudianteViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # ── Datos del estudiante ─────────────────────────────────────────
-        codigo   = serializer.validated_data['codigo_estudiante']
-        correo   = serializer.validated_data['correo']
-        nombre   = serializer.validated_data['nombre_completo']
+        codigo = serializer.validated_data['codigo_estudiante']
+        correo = serializer.validated_data['correo']
+        nombre = serializer.validated_data['nombre_completo']
 
-        # ── Crear usuario de Django ──────────────────────────────────────
-        # username = correo   →  el estudiante hace login con su correo
-        # password = codigo   →  la contraseña es su ID universitario
+        # Crear o recuperar usuario — siempre sincronizar contraseña
         try:
-            user = User.objects.create_user(
+            user, created = User.objects.get_or_create(
                 username=correo,
-                email=correo,
-                password=codigo,
-                first_name=nombre.split()[0] if nombre else '',
-                last_name=' '.join(nombre.split()[1:]) if len(nombre.split()) > 1 else '',
+                defaults={
+                    'email': correo,
+                    'first_name': nombre.split()[0] if nombre else '',
+                    'last_name': ' '.join(nombre.split()[1:]) if len(nombre.split()) > 1 else '',
+                }
             )
+            # Siempre actualizar la contraseña para que coincida con el código actual
+            user.set_password(codigo)
+            user.save()
         except Exception as e:
-            # Si el usuario ya existe, devolver el estudiante existente
-            try:
-                estudiante_existente = Estudiante.objects.get(correo=correo)
-                return Response(
-                    EstudianteSerializer(estudiante_existente).data,
-                    status=status.HTTP_200_OK
-                )
-            except Estudiante.DoesNotExist:
-                return Response(
-                    {'error': f'Error creando usuario: {str(e)}'},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
+            return Response(
+                {'error': f'Error creando usuario: {str(e)}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-        # ── Crear estudiante ─────────────────────────────────────────────
+        # Si el estudiante ya existe para ese usuario, devolverlo
+        try:
+            estudiante_existente = Estudiante.objects.get(user=user)
+            return Response(
+                EstudianteSerializer(estudiante_existente).data,
+                status=status.HTTP_200_OK
+            )
+        except Estudiante.DoesNotExist:
+            pass
+
+        # Crear estudiante
         estudiante = Estudiante.objects.create(
             user=user,
             profesor=profesor,
@@ -123,7 +125,6 @@ class EstudianteViewSet(viewsets.ModelViewSet):
         )
 
     def partial_update(self, request, *args, **kwargs):
-        """Actualizar estudiante (PATCH)"""
         estudiante = self.get_object()
         serializer = self.get_serializer(
             data=request.data,
@@ -140,15 +141,8 @@ class EstudianteViewSet(viewsets.ModelViewSet):
             status=status.HTTP_200_OK
         )
 
-    # ── Endpoints adicionales ────────────────────────────────────────────
-
     @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
     def mi_perfil(self, request):
-        """
-        Devuelve el perfil del estudiante autenticado.
-        GET /api/estudiantes/mi_perfil/
-        Headers: Authorization: Bearer {token}
-        """
         try:
             estudiante = Estudiante.objects.select_related('profesor', 'user').get(
                 user=request.user
@@ -163,11 +157,6 @@ class EstudianteViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
     def mis_practicas(self, request):
-        """
-        Devuelve las prácticas finalizadas del estudiante autenticado.
-        GET /api/estudiantes/mis_practicas/
-        Headers: Authorization: Bearer {token}
-        """
         try:
             estudiante = Estudiante.objects.get(user=request.user)
         except Estudiante.DoesNotExist:
@@ -179,9 +168,9 @@ class EstudianteViewSet(viewsets.ModelViewSet):
         from placa.models import PracticaActiva
         from placa.serializers import PracticaActivaSerializer
 
+        # Devolver TODAS las prácticas, no solo las finalizadas
         practicas = PracticaActiva.objects.filter(
-            estudiante=estudiante,
-            estado='finalizada'
+            estudiante=estudiante
         ).order_by('fecha_inicio')
 
         serializer = PracticaActivaSerializer(practicas, many=True)
@@ -194,11 +183,6 @@ class EstudianteViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['post'], permission_classes=[IsAuthenticated])
     def cambiar_password(self, request):
-        """
-        Cambiar contraseña del estudiante autenticado.
-        POST /api/estudiantes/cambiar_password/
-        Body: { "password_actual": "...", "password_nueva": "..." }
-        """
         try:
             estudiante = Estudiante.objects.get(user=request.user)
         except Estudiante.DoesNotExist:
@@ -206,31 +190,31 @@ class EstudianteViewSet(viewsets.ModelViewSet):
                 {'error': 'El usuario autenticado no tiene perfil de estudiante'},
                 status=status.HTTP_404_NOT_FOUND
             )
-    
+
         password_actual = request.data.get('password_actual')
-        password_nueva  = request.data.get('password_nueva')
-    
+        password_nueva = request.data.get('password_nueva')
+
         if not password_actual or not password_nueva:
             return Response(
                 {'error': 'Se requieren password_actual y password_nueva'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-    
+
         if not request.user.check_password(password_actual):
             return Response(
                 {'error': 'La contraseña actual es incorrecta'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-    
+
         if len(password_nueva) < 6:
             return Response(
                 {'error': 'La nueva contraseña debe tener al menos 6 caracteres'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-    
+
         request.user.set_password(password_nueva)
         request.user.save()
-    
+
         return Response(
             {'mensaje': 'Contraseña actualizada correctamente'},
             status=status.HTTP_200_OK
@@ -238,10 +222,6 @@ class EstudianteViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'])
     def por_profesor(self, request):
-        """
-        Obtener estudiantes de un profesor específico
-        GET /api/estudiantes/por_profesor/?profesor_id=1
-        """
         profesor_id = request.query_params.get('profesor_id')
 
         if not profesor_id:
@@ -272,10 +252,6 @@ class EstudianteViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['get'])
     def estadisticas(self, request, pk=None):
-        """
-        Obtener estadísticas de un estudiante
-        GET /api/estudiantes/{id}/estadisticas/
-        """
         estudiante = self.get_object()
         from placa.models import PracticaActiva
 
