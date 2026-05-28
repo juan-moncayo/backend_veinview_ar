@@ -40,9 +40,9 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    "corsheaders.middleware.CorsMiddleware",   # ← DEBE ser el primero absoluto
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
-    "corsheaders.middleware.CorsMiddleware",   # antes de CommonMiddleware
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -51,7 +51,7 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
-ROOT_URLCONF    = "config.urls"
+ROOT_URLCONF     = "config.urls"
 WSGI_APPLICATION = "config.wsgi.application"
 
 TEMPLATES = [
@@ -134,18 +134,11 @@ SIMPLE_JWT = {
 }
 
 # ── CORS ──────────────────────────────────────────────────────────────────────
-CORS_ALLOW_CREDENTIALS = True
+# Sin credenciales (JWT va en header Authorization, no en cookies)
+# así podemos usar CORS_ALLOW_ALL_ORIGINS sin restricciones del browser
+CORS_ALLOW_CREDENTIALS = False
+CORS_ALLOW_ALL_ORIGINS = True
 
-if DEBUG:
-    CORS_ALLOW_ALL_ORIGINS = True
-else:
-    # En Railway definir: CORS_ALLOWED_ORIGINS=https://tudominio.com
-    _cors_default = "https://backendveinviewar-production.up.railway.app"
-    CORS_ALLOWED_ORIGINS = config(
-        "CORS_ALLOWED_ORIGINS", default=_cors_default
-    ).split(",")
-
-# CORREGIDO: incluir cabeceras del ESP32 y del dashboard RA
 CORS_ALLOW_HEADERS = [
     "accept",
     "accept-encoding",
@@ -156,8 +149,17 @@ CORS_ALLOW_HEADERS = [
     "user-agent",
     "x-csrftoken",
     "x-requested-with",
-    "x-api-key",        # Autenticación del ESP32
-    "x-session-token",  # Sesión del dashboard RA
+    "x-api-key",
+    "x-session-token",
+]
+
+CORS_ALLOW_METHODS = [
+    "DELETE",
+    "GET",
+    "OPTIONS",
+    "PATCH",
+    "POST",
+    "PUT",
 ]
 
 # ── Seguridad en producción ───────────────────────────────────────────────────
@@ -165,7 +167,7 @@ if not DEBUG:
     SECURE_PROXY_SSL_HEADER     = ("HTTP_X_FORWARDED_PROTO", "https")
     USE_X_FORWARDED_HOST        = True
     USE_X_FORWARDED_PORT        = True
-    SECURE_SSL_REDIRECT         = False   # Railway ya maneja la redirección
+    SECURE_SSL_REDIRECT         = False
     SESSION_COOKIE_SECURE       = True
     CSRF_COOKIE_SECURE          = True
     SECURE_BROWSER_XSS_FILTER   = True
