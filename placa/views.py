@@ -1,3 +1,4 @@
+# placa/views.py
 from rest_framework import status, viewsets
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
@@ -15,12 +16,10 @@ from .serializers import (
 )
 from estudiantes.models import Estudiante
 
-# ✅ CONFIGURAR LOGGING
 logger = logging.getLogger('placa')
 
 
 def get_client_ip(request):
-    """Obtiene la IP real del cliente"""
     x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
     if x_forwarded_for:
         ip = x_forwarded_for.split(',')[0]
@@ -30,18 +29,16 @@ def get_client_ip(request):
 
 
 def verificar_api_key(request):
-    """Verifica la API Key del ESP32"""
     api_key = request.headers.get('X-API-Key') or request.GET.get('api_key')
-    
+
     if not api_key:
         return None, Response(
             {'error': 'API Key no proporcionada. Use header X-API-Key o parámetro api_key'},
             status=status.HTTP_401_UNAUTHORIZED
         )
-    
+
     try:
         dispositivo = DispositivoESP32.objects.get(api_key=api_key, activo=True)
-        # Actualizar última conexión
         dispositivo.ultima_conexion = timezone.now()
         dispositivo.ip_address = get_client_ip(request)
         dispositivo.save(update_fields=['ultima_conexion', 'ip_address'])
@@ -57,21 +54,15 @@ def verificar_api_key(request):
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def registrar_dispositivo(request):
-    """
-    Endpoint para registrar un nuevo ESP32
-    POST /api/placa/registrar/
-    Body: {"mac_address": "AA:BB:CC:DD:EE:FF", "nombre": "VeinView-01"}
-    """
     mac_address = request.data.get('mac_address', '').upper()
     nombre = request.data.get('nombre', 'VeinView Device')
-    
+
     if not mac_address:
         return Response(
             {'error': 'mac_address es requerido'},
             status=status.HTTP_400_BAD_REQUEST
         )
-    
-    # Verificar si ya existe
+
     dispositivo, created = DispositivoESP32.objects.get_or_create(
         mac_address=mac_address,
         defaults={
@@ -79,7 +70,7 @@ def registrar_dispositivo(request):
             'ip_address': get_client_ip(request)
         }
     )
-    
+
     if created:
         return Response({
             'message': 'Dispositivo registrado exitosamente',
@@ -98,15 +89,10 @@ def registrar_dispositivo(request):
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def verificar_conexion(request):
-    """
-    Endpoint para verificar conexión del ESP32
-    GET /api/placa/ping/?api_key=xxx
-    o Header: X-API-Key: xxx
-    """
     dispositivo, error_response = verificar_api_key(request)
     if error_response:
         return error_response
-    
+
     return Response({
         'status': 'ok',
         'message': 'Conexión exitosa',
@@ -119,21 +105,15 @@ def verificar_conexion(request):
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def obtener_practica_activa(request):
-    """
-    Endpoint para verificar si hay una práctica activa
-    GET /api/placa/practica-activa/?api_key=xxx
-    Retorna la práctica activa (iniciada o pausada) si existe
-    """
     dispositivo, error_response = verificar_api_key(request)
     if error_response:
         return error_response
-    
-    # Buscar práctica activa (no finalizada)
+
     practica_activa = PracticaActiva.objects.filter(
         dispositivo=dispositivo,
         estado__in=['iniciada', 'pausada']
     ).select_related('estudiante').first()
-    
+
     if practica_activa:
         return Response({
             'practica_activa': True,
@@ -145,7 +125,7 @@ def obtener_practica_activa(request):
             'practica_activa': False,
             'practica': None,
             'puede_enviar_datos': False,
-            'message': 'No hay prácticas activas. Espere a que el profesor inicie una práctica.'
+            'message': 'No hay prácticas activas.'
         })
 
 
@@ -153,52 +133,29 @@ def obtener_practica_activa(request):
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def enviar_datos_sensores(request):
-    """
-    Endpoint para recibir datos de sensores del ESP32
-    POST /api/placa/datos/
-    Headers: X-API-Key: xxx
-    Body: {
-        "ax": 0.5, "ay": -0.3, "az": 9.8,
-        "gx": 2.1, "gy": -1.5, "gz": 0.8,
-        "pitch": 15.5, "roll": -10.2, "yaw": 5.3,
-        "fuerza": 250.5, "presion": 0.5
-    }
-    """
-    # ✅ LOG DE INICIO
     logger.info("=" * 80)
     logger.info("🔵 RECIBIENDO DATOS DE SENSORES")
-    logger.info("=" * 80)
-    logger.info(f"📥 Request Method: {request.method}")
-    logger.info(f"📥 Request Headers: {dict(request.headers)}")
-    logger.info(f"📥 Request Body: {request.data}")
     logger.info(f"📥 IP Cliente: {get_client_ip(request)}")
-    
+
     dispositivo, error_response = verificar_api_key(request)
     if error_response:
-        logger.error(f"❌ Error en API Key: {error_response.data}")
+        logger.error(f"❌ Error en API Key")
         return error_response
-    
-    logger.info(f"✅ Dispositivo verificado: {dispositivo.nombre} (ID: {dispositivo.id})")
-    
-    # Verificar que haya una práctica activa
+
+    logger.info(f"✅ Dispositivo: {dispositivo.nombre}")
+
     practica_activa = PracticaActiva.objects.filter(
         dispositivo=dispositivo,
-        estado='iniciada'  # Solo aceptar datos si está iniciada (no pausada)
+        estado='iniciada'
     ).first()
-    
+
     if not practica_activa:
-        logger.warning(f"⚠️  No hay práctica activa para dispositivo {dispositivo.nombre}")
+        logger.warning(f"⚠️ No hay práctica activa para {dispositivo.nombre}")
         return Response({
             'error': 'No hay práctica activa o está pausada',
             'puede_enviar_datos': False
         }, status=status.HTTP_400_BAD_REQUEST)
-    
-    logger.info(f"✅ Práctica activa encontrada:")
-    logger.info(f"   📋 Práctica ID: {practica_activa.id}")
-    logger.info(f"   👤 Estudiante: {practica_activa.estudiante.nombre_completo}")
-    logger.info(f"   📊 Estado: {practica_activa.estado}")
-    
-    # Validar datos
+
     serializer = DatosSensorCreateSerializer(data=request.data)
     if not serializer.is_valid():
         logger.error(f"❌ Datos inválidos: {serializer.errors}")
@@ -206,15 +163,10 @@ def enviar_datos_sensores(request):
             'error': 'Datos inválidos',
             'detalles': serializer.errors
         }, status=status.HTTP_400_BAD_REQUEST)
-    
-    logger.info("✅ Datos validados correctamente")
-    
-    # Guardar datos
+
     datos = serializer.validated_data
-    
+
     try:
-        logger.info("💾 Guardando dato en base de datos...")
-        
         dato_sensor = DatosSensor.objects.create(
             practica=practica_activa,
             dispositivo=dispositivo,
@@ -231,29 +183,15 @@ def enviar_datos_sensores(request):
             presion=datos.get('presion'),
             ip_origen=get_client_ip(request)
         )
-        
-        logger.info("=" * 80)
-        logger.info("✅✅✅ DATO GUARDADO EXITOSAMENTE ✅✅✅")
-        logger.info("=" * 80)
-        logger.info(f"   🆔 ID del dato: {dato_sensor.id}")
-        logger.info(f"   📋 Práctica ID: {practica_activa.id}")
-        logger.info(f"   👤 Estudiante: {practica_activa.estudiante.nombre_completo}")
-        logger.info(f"   📐 Pitch: {dato_sensor.angulo_pitch}°")
-        logger.info(f"   📐 Roll: {dato_sensor.angulo_roll}°")
-        logger.info(f"   📐 Yaw: {dato_sensor.angulo_yaw}°")
-        logger.info(f"   💪 Fuerza: {dato_sensor.fuerza}g")
-        logger.info(f"   ✅ Técnica correcta: {dato_sensor.tecnica_correcta}")
-        logger.info(f"   🕐 Timestamp: {dato_sensor.timestamp}")
-        
-        # Verificar que se guardó
-        verificacion = DatosSensor.objects.filter(id=dato_sensor.id).exists()
-        logger.info(f"   🔍 Verificación en BD: {'✅ EXISTE' if verificacion else '❌ NO EXISTE'}")
-        
-        # Contar total de datos de esta práctica
+
         total_datos = DatosSensor.objects.filter(practica=practica_activa).count()
-        logger.info(f"   📊 Total datos en esta práctica: {total_datos}")
-        logger.info("=" * 80)
-        
+
+        logger.info(f"✅ Dato #{dato_sensor.id} guardado — "
+                    f"Pitch:{dato_sensor.angulo_pitch:.1f}° "
+                    f"Fuerza:{dato_sensor.fuerza:.1f}g "
+                    f"Técnica:{dato_sensor.tecnica_correcta} "
+                    f"Total:{total_datos}")
+
         return Response({
             'status': 'ok',
             'message': 'Datos guardados exitosamente',
@@ -263,17 +201,11 @@ def enviar_datos_sensores(request):
             'tecnica_correcta': dato_sensor.tecnica_correcta,
             'total_datos_practica': total_datos
         }, status=status.HTTP_201_CREATED)
-        
+
     except Exception as e:
-        logger.error("=" * 80)
-        logger.error("❌❌❌ ERROR AL GUARDAR DATO ❌❌❌")
-        logger.error("=" * 80)
-        logger.error(f"   ⚠️  Excepción: {str(e)}")
-        logger.error(f"   ⚠️  Tipo: {type(e).__name__}")
+        logger.error(f"❌ Error guardando dato: {str(e)}")
         import traceback
-        logger.error(f"   📋 Traceback: {traceback.format_exc()}")
-        logger.error("=" * 80)
-        
+        logger.error(traceback.format_exc())
         return Response({
             'error': 'Error al guardar datos',
             'detalle': str(e)
@@ -284,24 +216,19 @@ def enviar_datos_sensores(request):
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def estado_sistema(request):
-    """
-    Endpoint de estado completo del sistema
-    GET /api/placa/estado/?api_key=xxx
-    """
     dispositivo, error_response = verificar_api_key(request)
     if error_response:
         return error_response
-    
+
     practica_activa = PracticaActiva.objects.filter(
         dispositivo=dispositivo,
         estado__in=['iniciada', 'pausada']
     ).select_related('estudiante').first()
-    
-    if practica_activa:
-        total_datos = DatosSensor.objects.filter(practica=practica_activa).count()
-    else:
-        total_datos = 0
-    
+
+    total_datos = DatosSensor.objects.filter(
+        practica=practica_activa
+    ).count() if practica_activa else 0
+
     return Response({
         'dispositivo': {
             'nombre': dispositivo.nombre,
@@ -320,118 +247,152 @@ def estado_sistema(request):
 # ============================================
 
 class DispositivoESP32ViewSet(viewsets.ReadOnlyModelViewSet):
-    """
-    ViewSet para listar dispositivos ESP32
-    GET /api/placa/dispositivos/
-    """
     queryset = DispositivoESP32.objects.all()
     serializer_class = DispositivoESP32Serializer
     permission_classes = [AllowAny]
 
 
 class PracticaActivaViewSet(viewsets.ModelViewSet):
-    """
-    ViewSet para crear y actualizar prácticas
-    GET /api/placa/practicas/
-    POST /api/placa/practicas/
-    PATCH /api/placa/practicas/{id}/
-    """
     queryset = PracticaActiva.objects.select_related('estudiante', 'dispositivo').all()
     serializer_class = PracticaActivaSerializer
     permission_classes = [AllowAny]
-    
+
     def create(self, request, *args, **kwargs):
-        """Crear nueva práctica"""
         estudiante_id = request.data.get('estudiante_id')
         dispositivo_id = request.data.get('dispositivo_id')
-        
+
         if not estudiante_id or not dispositivo_id:
             return Response(
                 {'error': 'estudiante_id y dispositivo_id son requeridos'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
+
         try:
             estudiante = Estudiante.objects.get(id=estudiante_id)
-            dispositivo = DispositivoESP32.objects.get(id=dispositivo_id)
         except Estudiante.DoesNotExist:
             return Response(
                 {'error': 'Estudiante no encontrado'},
                 status=status.HTTP_404_NOT_FOUND
             )
+
+        try:
+            dispositivo = DispositivoESP32.objects.get(id=dispositivo_id)
         except DispositivoESP32.DoesNotExist:
             return Response(
                 {'error': 'Dispositivo no encontrado'},
                 status=status.HTTP_404_NOT_FOUND
             )
-        
-        # Crear práctica
+
         practica = PracticaActiva.objects.create(
             estudiante=estudiante,
             dispositivo=dispositivo,
             estado='iniciada'
         )
-        
-        logger.info(f"✅ Práctica creada: ID {practica.id}, Estudiante: {estudiante.nombre_completo}")
-        
-        serializer = self.get_serializer(practica)
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
-    
+
+        logger.info(f"✅ Práctica #{practica.id} creada — "
+                    f"Estudiante: {estudiante.nombre_completo}")
+
+        return Response(
+            self.get_serializer(practica).data,
+            status=status.HTTP_201_CREATED
+        )
+
     def partial_update(self, request, *args, **kwargs):
-        """Actualizar estado de práctica (PATCH)"""
         practica = self.get_object()
         nuevo_estado = request.data.get('estado')
-        
+
         if nuevo_estado not in ['iniciada', 'pausada', 'finalizada']:
             return Response(
                 {'error': 'Estado inválido. Use: iniciada, pausada o finalizada'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
+
         estado_anterior = practica.estado
-        
-        # Actualizar estado usando el método del modelo
+
         if nuevo_estado == 'pausada' and practica.estado == 'iniciada':
             practica.pausar()
+
         elif nuevo_estado == 'iniciada' and practica.estado == 'pausada':
             practica.reanudar()
+
         elif nuevo_estado == 'finalizada':
             practica.finalizar()
+            # Generar resumen automáticamente al finalizar
+            self._generar_resumen_automatico(practica, request)
+
         else:
             practica.estado = nuevo_estado
             practica.save()
-        
-        logger.info(f"🔄 Práctica {practica.id} cambió de estado: {estado_anterior} → {nuevo_estado}")
-        
-        serializer = self.get_serializer(practica)
-        return Response(serializer.data)
+
+        logger.info(
+            f"🔄 Práctica #{practica.id}: {estado_anterior} → {nuevo_estado}"
+        )
+
+        return Response(self.get_serializer(practica).data)
+
+    def _generar_resumen_automatico(self, practica, request):
+        """Genera o recalcula el resumen automáticamente al finalizar una práctica."""
+        from profesor.models import ResumenPractica, Profesor
+
+        try:
+            profesor = None
+            if request.user.is_authenticated:
+                try:
+                    profesor = Profesor.objects.get(user=request.user)
+                except Profesor.DoesNotExist:
+                    pass
+
+            # Si ya tiene resumen, recalcular con los rangos actuales
+            if hasattr(practica, 'resumen'):
+                resumen = practica.resumen
+                resumen.calcular_estadisticas()
+                resumen.calcular_calificacion_automatica()
+                logger.info(
+                    f"✅ Resumen recalculado — Práctica #{practica.id} "
+                    f"— {resumen.precision_porcentaje:.1f}% "
+                    f"— {resumen.calificacion}/5"
+                )
+            else:
+                resumen = ResumenPractica.objects.create(
+                    practica=practica,
+                    profesor=profesor,
+                    observaciones=''
+                )
+                resumen.calcular_estadisticas()
+                resumen.calcular_calificacion_automatica()
+                logger.info(
+                    f"✅ Resumen creado — Práctica #{practica.id} "
+                    f"— {resumen.precision_porcentaje:.1f}% "
+                    f"— {resumen.calificacion}/5"
+                )
+
+        except Exception as e:
+            logger.error(
+                f"❌ Error generando resumen para práctica #{practica.id}: {str(e)}"
+            )
 
 
 class DatosSensorViewSet(viewsets.ReadOnlyModelViewSet):
-    """
-    ViewSet para listar datos de sensores
-    GET /api/placa/datos-sensores/?practica=1&limit=10
-    """
     queryset = DatosSensor.objects.all()
     serializer_class = DatosSensorSerializer
     permission_classes = [AllowAny]
-    
+
     def get_queryset(self):
-        queryset = DatosSensor.objects.select_related('practica', 'dispositivo').all()
-        practica_id = self.request.query_params.get('practica', None)
-        
+        queryset = DatosSensor.objects.select_related(
+            'practica', 'dispositivo'
+        ).all()
+
+        practica_id = self.request.query_params.get('practica')
         if practica_id:
             queryset = queryset.filter(practica_id=practica_id)
-        
-        # Ordenar por timestamp descendente
+
         queryset = queryset.order_by('-timestamp')
-        
-        # Limitar resultados
-        limit = self.request.query_params.get('limit', None)
+
+        limit = self.request.query_params.get('limit')
         if limit:
             try:
                 queryset = queryset[:int(limit)]
             except ValueError:
                 pass
-        
+
         return queryset
