@@ -3,6 +3,9 @@ from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from django.contrib.auth.models import User
+from django.contrib.auth import authenticate
+import logging
+
 from .models import Estudiante
 from .serializers import (
     EstudianteSerializer,
@@ -10,6 +13,8 @@ from .serializers import (
     EstudianteUpdateSerializer,
 )
 from profesor.models import Profesor
+
+logger = logging.getLogger(__name__)
 
 
 class EstudianteViewSet(viewsets.ModelViewSet):
@@ -31,10 +36,10 @@ class EstudianteViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(profesor_id=profesor_id)
         search = self.request.query_params.get('search')
         if search:
+            from django.db.models import Q
             queryset = queryset.filter(
-                nombre_completo__icontains=search
-            ) | queryset.filter(
-                codigo_estudiante__icontains=search
+                Q(nombre_completo__icontains=search) |
+                Q(codigo_estudiante__icontains=search)
             )
         return queryset
 
@@ -42,12 +47,13 @@ class EstudianteViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        # Determinar profesor
+        # ── Determinar profesor ──────────────────────────────
         profesor = None
 
         if request.user.is_authenticated:
             try:
                 profesor = Profesor.objects.get(user=request.user)
+                logger.info(f"Profesor desde auth: {profesor.nombre_completo}")
             except Profesor.DoesNotExist:
                 pass
 
@@ -56,6 +62,7 @@ class EstudianteViewSet(viewsets.ModelViewSet):
             if profesor_id:
                 try:
                     profesor = Profesor.objects.get(id=profesor_id)
+                    logger.info(f"Profesor desde profesor_id: {profesor.nombre_completo}")
                 except Profesor.DoesNotExist:
                     return Response(
                         {'error': f'Profesor con ID {profesor_id} no encontrado'},
@@ -64,20 +71,17 @@ class EstudianteViewSet(viewsets.ModelViewSet):
 
         if profesor is None:
             return Response(
-                {
-                    'error': (
-                        'No se pudo determinar el profesor. '
-                        'Asegúrate de estar autenticado como profesor o envía profesor_id.'
-                    )
-                },
+                {'error': 'No se pudo determinar el profesor.'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        codigo = serializer.validated_data['codigo_estudiante']
-        correo = serializer.validated_data['correo']
-        nombre = serializer.validated_data['nombre_completo']
+        codigo  = serializer.validated_data['codigo_estudiante']
+        correo  = serializer.validated_data['correo']
+        nombre  = serializer.validated_data['nombre_completo']
 
-        # Crear o recuperar usuario — siempre sincronizar contraseña
+        logger.info(f"Creando estudiante: correo={correo} codigo={codigo}")
+
+        # ── Crear o recuperar User ───────────────────────────
         try:
             user, created = User.objects.get_or_create(
                 username=correo,
@@ -87,18 +91,31 @@ class EstudianteViewSet(viewsets.ModelViewSet):
                     'last_name': ' '.join(nombre.split()[1:]) if len(nombre.split()) > 1 else '',
                 }
             )
-            # Siempre actualizar la contraseña para que coincida con el código actual
+            # Siempre sincronizar contraseña con el código
             user.set_password(codigo)
+            user.is_active = True
             user.save()
+
+            logger.info(f"User {'creado' if created else 'actualizado'}: username={user.username} is_active={user.is_active}")
+
+            # Verificar que la contraseña quedó bien
+            test = authenticate(username=correo, password=codigo)
+            if test:
+                logger.info(f"Verificacion auth OK para {correo}")
+            else:
+                logger.error(f"FALLO verificacion auth para {correo} con password={codigo}")
+
         except Exception as e:
+            logger.error(f"Error creando user: {str(e)}")
             return Response(
                 {'error': f'Error creando usuario: {str(e)}'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Si el estudiante ya existe para ese usuario, devolverlo
+        # ── Si ya existe el Estudiante, devolverlo ───────────
         try:
             estudiante_existente = Estudiante.objects.get(user=user)
+            logger.info(f"Estudiante ya existia: {estudiante_existente.codigo_estudiante}")
             return Response(
                 EstudianteSerializer(estudiante_existente).data,
                 status=status.HTTP_200_OK
@@ -106,7 +123,7 @@ class EstudianteViewSet(viewsets.ModelViewSet):
         except Estudiante.DoesNotExist:
             pass
 
-        # Crear estudiante
+        # ── Crear Estudiante ─────────────────────────────────
         estudiante = Estudiante.objects.create(
             user=user,
             profesor=profesor,
@@ -118,6 +135,8 @@ class EstudianteViewSet(viewsets.ModelViewSet):
             telefono=serializer.validated_data.get('telefono', ''),
             activo=True,
         )
+
+        logger.info(f"Estudiante creado OK: {estudiante.codigo_estudiante} - {estudiante.correo}")
 
         return Response(
             EstudianteSerializer(estudiante).data,
@@ -152,7 +171,6 @@ class EstudianteViewSet(viewsets.ModelViewSet):
                 {'error': 'El usuario autenticado no tiene perfil de estudiante'},
                 status=status.HTTP_404_NOT_FOUND
             )
-
         return Response(EstudianteSerializer(estudiante).data, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
@@ -168,7 +186,6 @@ class EstudianteViewSet(viewsets.ModelViewSet):
         from placa.models import PracticaActiva
         from placa.serializers import PracticaActivaSerializer
 
-        # Devolver TODAS las prácticas, no solo las finalizadas
         practicas = PracticaActiva.objects.filter(
             estudiante=estudiante
         ).order_by('fecha_inicio')
@@ -192,7 +209,7 @@ class EstudianteViewSet(viewsets.ModelViewSet):
             )
 
         password_actual = request.data.get('password_actual')
-        password_nueva = request.data.get('password_nueva')
+        password_nueva  = request.data.get('password_nueva')
 
         if not password_actual or not password_nueva:
             return Response(
@@ -239,15 +256,15 @@ class EstudianteViewSet(viewsets.ModelViewSet):
             )
 
         estudiantes = self.queryset.filter(profesor=profesor, activo=True)
-        serializer = EstudianteSerializer(estudiantes, many=True)
+        serializer  = EstudianteSerializer(estudiantes, many=True)
 
         return Response({
             'profesor': {
-                'id': profesor.id,
+                'id':     profesor.id,
                 'nombre': profesor.nombre_completo,
             },
             'total_estudiantes': estudiantes.count(),
-            'estudiantes': serializer.data,
+            'estudiantes':       serializer.data,
         })
 
     @action(detail=True, methods=['get'])
@@ -255,13 +272,13 @@ class EstudianteViewSet(viewsets.ModelViewSet):
         estudiante = self.get_object()
         from placa.models import PracticaActiva
 
-        practicas = PracticaActiva.objects.filter(estudiante=estudiante)
+        practicas            = PracticaActiva.objects.filter(estudiante=estudiante)
         practicas_finalizadas = practicas.filter(estado='finalizada')
 
         if not practicas_finalizadas.exists():
             return Response({
-                'estudiante': EstudianteSerializer(estudiante).data,
-                'total_practicas': 0,
+                'estudiante':          EstudianteSerializer(estudiante).data,
+                'total_practicas':     0,
                 'practicas_finalizadas': 0,
                 'mensaje': 'Este estudiante no tiene prácticas finalizadas',
             })
@@ -274,10 +291,10 @@ class EstudianteViewSet(viewsets.ModelViewSet):
         )
 
         return Response({
-            'estudiante': EstudianteSerializer(estudiante).data,
-            'total_practicas': practicas.count(),
-            'practicas_finalizadas': practicas_finalizadas.count(),
-            'promedio_precision': round(stats['avg_precision'] or 0, 2),
-            'promedio_intentos': round(stats['avg_intentos'] or 0, 2),
+            'estudiante':              EstudianteSerializer(estudiante).data,
+            'total_practicas':         practicas.count(),
+            'practicas_finalizadas':   practicas_finalizadas.count(),
+            'promedio_precision':      round(stats['avg_precision'] or 0, 2),
+            'promedio_intentos':       round(stats['avg_intentos']  or 0, 2),
             'promedio_tiempo_minutos': round((stats['avg_tiempo'] or 0) / 60, 2),
         })
