@@ -1,3 +1,4 @@
+# placa/serializers.py
 from rest_framework import serializers
 from .models import DispositivoESP32, PracticaActiva, DatosSensor
 from estudiantes.models import Estudiante
@@ -18,19 +19,29 @@ class EstudianteSimpleSerializer(serializers.ModelSerializer):
 class PracticaActivaSerializer(serializers.ModelSerializer):
     estudiante = EstudianteSimpleSerializer(read_only=True)
     tiempo_transcurrido = serializers.SerializerMethodField()
-    
+
     class Meta:
         model = PracticaActiva
-        fields = ['id', 'estudiante', 'estado', 'fecha_inicio', 'fecha_fin', 
-                  'duracion_total_segundos', 'tiempo_transcurrido']
-    
+        fields = [
+            'id',
+            'estudiante',
+            'estado',
+            'fecha_inicio',
+            'fecha_fin',
+            'duracion_total_segundos',
+            'tiempo_transcurrido',
+            'numero_intentos',
+            'intentos_exitosos',
+            'precision_promedio',
+        ]
+
     def get_tiempo_transcurrido(self, obj):
         from django.utils import timezone
         if obj.estado == 'finalizada':
             return obj.duracion_total_segundos
         elif obj.estado == 'pausada':
             return obj.duracion_total_segundos
-        else:  # iniciada
+        else:
             ahora = timezone.now()
             if obj.fecha_reanudacion:
                 tiempo_actual = (ahora - obj.fecha_reanudacion).total_seconds()
@@ -54,7 +65,6 @@ class DatosSensorSerializer(serializers.ModelSerializer):
 
 class DatosSensorCreateSerializer(serializers.Serializer):
     """Serializer para recibir datos del ESP32"""
-    # MPU6050
     ax = serializers.FloatField()
     ay = serializers.FloatField()
     az = serializers.FloatField()
@@ -64,7 +74,5 @@ class DatosSensorCreateSerializer(serializers.Serializer):
     pitch = serializers.FloatField()
     roll = serializers.FloatField()
     yaw = serializers.FloatField()
-    
-    # Celda de carga
     fuerza = serializers.FloatField()
     presion = serializers.FloatField(required=False, allow_null=True)
