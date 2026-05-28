@@ -7,555 +7,97 @@
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;800&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #050a14;
-    --surface: #0a1628;
-    --surface2: #0f1f3d;
-    --border: #1a3a6b;
-    --accent: #00d4ff;
-    --accent2: #0066ff;
-    --green: #00ff88;
-    --yellow: #ffcc00;
-    --red: #ff3355;
-    --text: #e8f4ff;
-    --muted: #4a7aaa;
-    --glow-blue: 0 0 20px rgba(0,212,255,0.4);
-    --glow-green: 0 0 20px rgba(0,255,136,0.4);
-    --glow-red: 0 0 30px rgba(255,51,85,0.6);
+    --bg:#050a14;--surface:#0a1628;--surface2:#0f1f3d;--border:#1a3a6b;
+    --accent:#00d4ff;--accent2:#0066ff;--green:#00ff88;--yellow:#ffcc00;
+    --red:#ff3355;--text:#e8f4ff;--muted:#4a7aaa;
+    --glow-blue:0 0 20px rgba(0,212,255,0.4);
+    --glow-green:0 0 20px rgba(0,255,136,0.4);
+    --glow-red:0 0 30px rgba(255,51,85,0.6);
   }
-
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-
-  body {
-    background: var(--bg);
-    color: var(--text);
-    font-family: 'Syne', sans-serif;
-    min-height: 100vh;
-    overflow-x: hidden;
-  }
-
-  /* Animated background grid */
-  body::before {
-    content: '';
-    position: fixed;
-    inset: 0;
-    background-image:
-      linear-gradient(rgba(0,102,255,0.03) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(0,102,255,0.03) 1px, transparent 1px);
-    background-size: 40px 40px;
-    pointer-events: none;
-    z-index: 0;
-  }
-
-  body::after {
-    content: '';
-    position: fixed;
-    top: -50%;
-    left: -50%;
-    width: 200%;
-    height: 200%;
-    background: radial-gradient(ellipse at 30% 20%, rgba(0,102,255,0.06) 0%, transparent 50%),
-                radial-gradient(ellipse at 70% 80%, rgba(0,212,255,0.04) 0%, transparent 50%);
-    pointer-events: none;
-    z-index: 0;
-    animation: bgPulse 8s ease-in-out infinite alternate;
-  }
-
-  @keyframes bgPulse {
-    from { opacity: 0.5; }
-    to { opacity: 1; }
-  }
-
-  .wrapper {
-    position: relative;
-    z-index: 1;
-    max-width: 900px;
-    margin: 0 auto;
-    padding: 24px 20px 40px;
-  }
-
-  /* Header */
-  header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 32px;
-    padding-bottom: 20px;
-    border-bottom: 1px solid var(--border);
-  }
-
-  .logo {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-
-  .logo-icon {
-    width: 42px;
-    height: 42px;
-    background: linear-gradient(135deg, var(--accent2), var(--accent));
-    border-radius: 10px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 20px;
-    box-shadow: var(--glow-blue);
-  }
-
-  .logo-text {
-    font-size: 22px;
-    font-weight: 800;
-    letter-spacing: -0.5px;
-  }
-
-  .logo-text span {
-    color: var(--accent);
-  }
-
-  .logo-sub {
-    font-family: 'Space Mono', monospace;
-    font-size: 10px;
-    color: var(--muted);
-    letter-spacing: 2px;
-    text-transform: uppercase;
-    margin-top: 2px;
-  }
-
-  .connection-badge {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 20px;
-    padding: 8px 16px;
-    font-family: 'Space Mono', monospace;
-    font-size: 11px;
-    color: var(--muted);
-  }
-
-  .dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: var(--muted);
-    transition: all 0.3s;
-  }
-
-  .dot.connected { background: var(--green); box-shadow: var(--glow-green); animation: pulse 2s infinite; }
-  .dot.error { background: var(--red); box-shadow: var(--glow-red); }
-  .dot.connecting { background: var(--yellow); animation: blink 1s infinite; }
-
-  @keyframes pulse {
-    0%, 100% { opacity: 1; transform: scale(1); }
-    50% { opacity: 0.6; transform: scale(0.85); }
-  }
-  @keyframes blink {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.3; }
-  }
-
-  /* Alert Banner */
-  #alertBanner {
-    display: none;
-    background: linear-gradient(135deg, rgba(255,51,85,0.15), rgba(255,51,85,0.05));
-    border: 1px solid var(--red);
-    border-radius: 12px;
-    padding: 16px 20px;
-    margin-bottom: 24px;
-    box-shadow: var(--glow-red);
-    animation: alertShake 0.4s ease, alertPulse 2s 0.4s infinite;
-  }
-
-  #alertBanner.show { display: flex; align-items: flex-start; gap: 14px; }
-
-  @keyframes alertShake {
-    0%, 100% { transform: translateX(0); }
-    20% { transform: translateX(-6px); }
-    40% { transform: translateX(6px); }
-    60% { transform: translateX(-4px); }
-    80% { transform: translateX(4px); }
-  }
-
-  @keyframes alertPulse {
-    0%, 100% { box-shadow: 0 0 20px rgba(255,51,85,0.4); }
-    50% { box-shadow: 0 0 40px rgba(255,51,85,0.8); }
-  }
-
-  .alert-icon { font-size: 28px; flex-shrink: 0; }
-
-  .alert-content { flex: 1; }
-
-  .alert-title {
-    font-size: 14px;
-    font-weight: 800;
-    color: var(--red);
-    letter-spacing: 1px;
-    text-transform: uppercase;
-    margin-bottom: 4px;
-  }
-
-  #alertMessage {
-    font-family: 'Space Mono', monospace;
-    font-size: 13px;
-    color: #ffaaaa;
-    line-height: 1.5;
-  }
-
-  /* Main grid */
-  .grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 16px;
-    margin-bottom: 16px;
-  }
-
-  @media (max-width: 600px) {
-    .grid { grid-template-columns: 1fr; }
-    header { flex-direction: column; gap: 12px; align-items: flex-start; }
-  }
-
-  /* Cards */
-  .card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    padding: 20px;
-    transition: border-color 0.3s;
-  }
-
-  .card:hover { border-color: rgba(0,212,255,0.3); }
-
-  .card-label {
-    font-family: 'Space Mono', monospace;
-    font-size: 10px;
-    color: var(--muted);
-    letter-spacing: 2px;
-    text-transform: uppercase;
-    margin-bottom: 10px;
-  }
-
-  /* Estado práctica */
-  .estado-card {
-    grid-column: 1 / -1;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    flex-wrap: wrap;
-    gap: 12px;
-  }
-
-  .estado-info { flex: 1; }
-
-  #estadoTexto {
-    font-size: 28px;
-    font-weight: 800;
-    letter-spacing: -1px;
-    transition: color 0.4s;
-  }
-
-  .estado-detenida { color: var(--muted) !important; }
-  .estado-corriendo { color: var(--green) !important; text-shadow: var(--glow-green); }
-  .estado-pausada { color: var(--yellow) !important; }
-  .estado-finalizada { color: var(--red) !important; }
-
-  #practicaInfo {
-    font-family: 'Space Mono', monospace;
-    font-size: 11px;
-    color: var(--muted);
-    margin-top: 4px;
-  }
-
-  /* Control buttons */
-  .controls {
-    display: flex;
-    gap: 10px;
-    flex-wrap: wrap;
-  }
-
-  .btn {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 12px 22px;
-    border: none;
-    border-radius: 10px;
-    font-family: 'Syne', sans-serif;
-    font-size: 13px;
-    font-weight: 700;
-    letter-spacing: 0.5px;
-    cursor: pointer;
-    transition: all 0.2s;
-    position: relative;
-    overflow: hidden;
-  }
-
-  .btn::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: rgba(255,255,255,0.1);
-    opacity: 0;
-    transition: opacity 0.2s;
-  }
-
-  .btn:hover::before { opacity: 1; }
-  .btn:active { transform: scale(0.96); }
-  .btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
-
-  .btn-iniciar {
-    background: linear-gradient(135deg, #00cc66, #00ff88);
-    color: #001a0d;
-    box-shadow: 0 4px 15px rgba(0,255,136,0.3);
-  }
-
-  .btn-pausar {
-    background: linear-gradient(135deg, #cc9900, #ffcc00);
-    color: #1a1200;
-    box-shadow: 0 4px 15px rgba(255,204,0,0.3);
-  }
-
-  .btn-finalizar {
-    background: linear-gradient(135deg, #cc2244, #ff3355);
-    color: #fff;
-    box-shadow: 0 4px 15px rgba(255,51,85,0.3);
-  }
-
-  /* Sensor cards */
-  .sensor-value {
-    font-family: 'Space Mono', monospace;
-    font-size: 36px;
-    font-weight: 700;
-    line-height: 1;
-    margin: 8px 0 4px;
-    transition: color 0.4s;
-  }
-
-  .sensor-unit {
-    font-family: 'Space Mono', monospace;
-    font-size: 11px;
-    color: var(--muted);
-  }
-
-  .sensor-bar-container {
-    margin-top: 12px;
-    height: 4px;
-    background: var(--surface2);
-    border-radius: 2px;
-    overflow: hidden;
-  }
-
-  .sensor-bar {
-    height: 100%;
-    border-radius: 2px;
-    transition: width 0.5s ease, background 0.4s;
-    width: 0%;
-  }
-
-  .sensor-tag {
-    display: inline-block;
-    margin-top: 8px;
-    padding: 3px 10px;
-    border-radius: 20px;
-    font-family: 'Space Mono', monospace;
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 1px;
-    text-transform: uppercase;
-  }
-
-  .tag-ok { background: rgba(0,255,136,0.15); color: var(--green); }
-  .tag-warn { background: rgba(255,204,0,0.15); color: var(--yellow); }
-  .tag-critical { background: rgba(255,51,85,0.15); color: var(--red); }
-
-  /* Estudiante card */
-  .estudiante-card {
-    grid-column: 1 / -1;
-  }
-
-  .estudiante-info {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-  }
-
-  .avatar {
-    width: 44px;
-    height: 44px;
-    background: linear-gradient(135deg, var(--accent2), var(--accent));
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 18px;
-    flex-shrink: 0;
-  }
-
-  #estudianteNombre {
-    font-size: 17px;
-    font-weight: 700;
-  }
-
-  #estudianteCodigo {
-    font-family: 'Space Mono', monospace;
-    font-size: 11px;
-    color: var(--muted);
-    margin-top: 2px;
-  }
-
-  /* Timer */
-  #timerDisplay {
-    font-family: 'Space Mono', monospace;
-    font-size: 42px;
-    font-weight: 700;
-    color: var(--accent);
-    letter-spacing: 2px;
-    text-shadow: var(--glow-blue);
-  }
-
-  /* Precision */
-  #precisionValue {
-    font-family: 'Space Mono', monospace;
-    font-size: 42px;
-    font-weight: 700;
-  }
-
-  .precision-ring {
-    width: 80px;
-    height: 80px;
-    position: relative;
-    float: right;
-    margin-top: -60px;
-  }
-
-  .precision-ring svg { transform: rotate(-90deg); }
-
-  #precisionCircle {
-    stroke-dasharray: 220;
-    stroke-dashoffset: 220;
-    transition: stroke-dashoffset 0.8s ease, stroke 0.4s;
-  }
-
-  /* Footer */
-  .footer-bar {
-    margin-top: 24px;
-    padding-top: 16px;
-    border-top: 1px solid var(--border);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    flex-wrap: gap;
-    gap: 10px;
-  }
-
-  .server-url {
-    font-family: 'Space Mono', monospace;
-    font-size: 10px;
-    color: var(--muted);
-  }
-
-  #lastUpdate {
-    font-family: 'Space Mono', monospace;
-    font-size: 10px;
-    color: var(--muted);
-  }
-
-  /* Config panel */
-  .config-panel {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    padding: 20px;
-    margin-bottom: 16px;
-  }
-
-  .config-panel summary {
-    font-family: 'Space Mono', monospace;
-    font-size: 11px;
-    color: var(--muted);
-    letter-spacing: 2px;
-    text-transform: uppercase;
-    cursor: pointer;
-    user-select: none;
-    list-style: none;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .config-panel summary::before { content: '▶'; font-size: 8px; transition: transform 0.2s; }
-  .config-panel[open] summary::before { transform: rotate(90deg); }
-
-  .config-body {
-    margin-top: 16px;
-    display: flex;
-    gap: 10px;
-    flex-wrap: wrap;
-    align-items: flex-end;
-  }
-
-  .config-field { flex: 1; min-width: 200px; }
-
-  .config-field label {
-    display: block;
-    font-family: 'Space Mono', monospace;
-    font-size: 10px;
-    color: var(--muted);
-    letter-spacing: 1px;
-    text-transform: uppercase;
-    margin-bottom: 6px;
-  }
-
-  .config-field input {
-    width: 100%;
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 10px 14px;
-    color: var(--text);
-    font-family: 'Space Mono', monospace;
-    font-size: 12px;
-    outline: none;
-    transition: border-color 0.2s;
-  }
-
-  .config-field input:focus { border-color: var(--accent); }
-
-  .btn-config {
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 10px 18px;
-    color: var(--text);
-    font-family: 'Syne', sans-serif;
-    font-size: 12px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s;
-    white-space: nowrap;
-  }
-
-  .btn-config:hover { border-color: var(--accent); color: var(--accent); }
-
-  /* Loader */
-  .spin {
-    display: inline-block;
-    animation: spin 1s linear infinite;
-  }
-  @keyframes spin { to { transform: rotate(360deg); } }
-
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--bg);color:var(--text);font-family:'Syne',sans-serif;min-height:100vh;overflow-x:hidden}
+  body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(0,102,255,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(0,102,255,0.03) 1px,transparent 1px);background-size:40px 40px;pointer-events:none;z-index:0}
+  .wrapper{position:relative;z-index:1;max-width:900px;margin:0 auto;padding:24px 20px 40px}
+  header{display:flex;align-items:center;justify-content:space-between;margin-bottom:32px;padding-bottom:20px;border-bottom:1px solid var(--border)}
+  .logo{display:flex;align-items:center;gap:12px}
+  .logo-icon{width:42px;height:42px;background:linear-gradient(135deg,var(--accent2),var(--accent));border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px}
+  .logo-text{font-size:22px;font-weight:800;letter-spacing:-0.5px}
+  .logo-text span{color:var(--accent)}
+  .logo-sub{font-family:'Space Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-top:2px}
+  .connection-badge{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:8px 16px;font-family:'Space Mono',monospace;font-size:11px;color:var(--muted)}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--muted);transition:all 0.3s}
+  .dot.connected{background:var(--green);animation:pulse 2s infinite}
+  .dot.error{background:var(--red)}
+  .dot.connecting{background:var(--yellow);animation:blink 1s infinite}
+  @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.6;transform:scale(0.85)}}
+  @keyframes blink{0%,100%{opacity:1}50%{opacity:0.3}}
+  #alertBanner{display:none;background:linear-gradient(135deg,rgba(255,51,85,0.15),rgba(255,51,85,0.05));border:1px solid var(--red);border-radius:12px;padding:16px 20px;margin-bottom:24px;animation:alertPulse 2s infinite}
+  #alertBanner.show{display:flex;align-items:flex-start;gap:14px}
+  @keyframes alertPulse{0%,100%{box-shadow:0 0 20px rgba(255,51,85,0.4)}50%{box-shadow:0 0 40px rgba(255,51,85,0.8)}}
+  .alert-icon{font-size:28px;flex-shrink:0}
+  .alert-title{font-size:14px;font-weight:800;color:var(--red);letter-spacing:1px;text-transform:uppercase;margin-bottom:4px}
+  #alertMessage{font-family:'Space Mono',monospace;font-size:13px;color:#ffaaaa;line-height:1.5}
+  #reconnectBanner{display:none;background:rgba(255,204,0,0.1);border:1px solid var(--yellow);border-radius:10px;padding:10px 16px;margin-bottom:12px;font-family:'Space Mono',monospace;font-size:11px;color:var(--yellow)}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
+  @media(max-width:600px){.grid{grid-template-columns:1fr}header{flex-direction:column;gap:12px;align-items:flex-start}}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:20px;transition:border-color 0.3s}
+  .card:hover{border-color:rgba(0,212,255,0.3)}
+  .card-label{font-family:'Space Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-bottom:10px}
+  .estado-card{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px}
+  .estado-info{flex:1}
+  #estadoTexto{font-size:28px;font-weight:800;letter-spacing:-1px;transition:color 0.4s}
+  .estado-detenida{color:var(--muted)!important}
+  .estado-corriendo{color:var(--green)!important}
+  .estado-pausada{color:var(--yellow)!important}
+  .estado-finalizada{color:var(--red)!important}
+  #practicaInfo{font-family:'Space Mono',monospace;font-size:11px;color:var(--muted);margin-top:4px}
+  .controls{display:flex;gap:10px;flex-wrap:wrap}
+  .btn{display:flex;align-items:center;gap:8px;padding:12px 22px;border:none;border-radius:10px;font-family:'Syne',sans-serif;font-size:13px;font-weight:700;cursor:pointer;transition:all 0.2s}
+  .btn:active{transform:scale(0.96)}
+  .btn:disabled{opacity:0.4;cursor:not-allowed;transform:none}
+  .btn-iniciar{background:linear-gradient(135deg,#00cc66,#00ff88);color:#001a0d}
+  .btn-pausar{background:linear-gradient(135deg,#cc9900,#ffcc00);color:#1a1200}
+  .btn-finalizar{background:linear-gradient(135deg,#cc2244,#ff3355);color:#fff}
+  .sensor-value{font-family:'Space Mono',monospace;font-size:36px;font-weight:700;line-height:1;margin:8px 0 4px;transition:color 0.4s}
+  .sensor-unit{font-family:'Space Mono',monospace;font-size:11px;color:var(--muted)}
+  .sensor-bar-container{margin-top:12px;height:4px;background:var(--surface2);border-radius:2px;overflow:hidden}
+  .sensor-bar{height:100%;border-radius:2px;transition:width 0.5s ease,background 0.4s;width:0%}
+  .sensor-tag{display:inline-block;margin-top:8px;padding:3px 10px;border-radius:20px;font-family:'Space Mono',monospace;font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase}
+  .tag-ok{background:rgba(0,255,136,0.15);color:var(--green)}
+  .tag-warn{background:rgba(255,204,0,0.15);color:var(--yellow)}
+  .tag-critical{background:rgba(255,51,85,0.15);color:var(--red)}
+  .estudiante-card{grid-column:1/-1}
+  .estudiante-info{display:flex;align-items:center;gap:14px}
+  .avatar{width:44px;height:44px;background:linear-gradient(135deg,var(--accent2),var(--accent));border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+  #estudianteNombre{font-size:17px;font-weight:700}
+  #estudianteCodigo{font-family:'Space Mono',monospace;font-size:11px;color:var(--muted);margin-top:2px}
+  #timerDisplay{font-family:'Space Mono',monospace;font-size:42px;font-weight:700;color:var(--accent);letter-spacing:2px}
+  #precisionValue{font-family:'Space Mono',monospace;font-size:42px;font-weight:700}
+  .footer-bar{margin-top:24px;padding-top:16px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+  .server-url{font-family:'Space Mono',monospace;font-size:10px;color:var(--muted)}
+  #lastUpdate{font-family:'Space Mono',monospace;font-size:10px;color:var(--muted)}
+  .config-panel{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:16px}
+  .config-panel summary{font-family:'Space Mono',monospace;font-size:11px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;cursor:pointer;user-select:none;list-style:none;display:flex;align-items:center;gap:8px}
+  .config-panel summary::before{content:'▶';font-size:8px;transition:transform 0.2s}
+  .config-panel[open] summary::before{transform:rotate(90deg)}
+  .config-body{margin-top:16px;display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+  .config-field{flex:1;min-width:200px}
+  .config-field label{display:block;font-family:'Space Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:6px}
+  .config-field input{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-family:'Space Mono',monospace;font-size:12px;outline:none;transition:border-color 0.2s}
+  .config-field input:focus{border-color:var(--accent)}
+  .btn-config{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 18px;color:var(--text);font-family:'Syne',sans-serif;font-size:12px;font-weight:600;cursor:pointer;transition:all 0.2s;white-space:nowrap}
+  .btn-config:hover{border-color:var(--accent);color:var(--accent)}
 </style>
 </head>
 <body>
-
 <div class="wrapper">
 
-  <!-- Header -->
   <header>
     <div class="logo">
       <div class="logo-icon">💉</div>
       <div>
         <div class="logo-text">Vein<span>View</span> AR</div>
-        <div class="logo-sub">Control de Simulación</div>
+        <div class="logo-sub">Control de Simulación v3.4</div>
       </div>
     </div>
     <div class="connection-badge">
@@ -564,7 +106,10 @@
     </div>
   </header>
 
-  <!-- Alert Banner -->
+  <!-- Banner reconexión -->
+  <div id="reconnectBanner">⟳ Reconectando sesión...</div>
+
+  <!-- Banner alerta -->
   <div id="alertBanner">
     <div class="alert-icon">⚠️</div>
     <div class="alert-content">
@@ -573,25 +118,23 @@
     </div>
   </div>
 
-  <!-- Config panel -->
+  <!-- Config -->
   <details class="config-panel" id="configPanel">
     <summary>Configuración del servidor</summary>
     <div class="config-body">
       <div class="config-field">
-        <label>URL del servidor Django</label>
-        <input type="text" id="serverUrl" placeholder="http://192.168.1.X:8000" />
+        <label>URL del servidor (HTTPS)</label>
+        <input type="text" id="serverUrl" placeholder="https://backendveinviewar-production.up.railway.app"/>
       </div>
       <div class="config-field">
         <label>Device ID (gafas)</label>
-        <input type="text" id="deviceId" value="oculus-quest3-veinview-001" />
+        <input type="text" id="deviceId" value="oculus-quest3-veinview-001"/>
       </div>
       <button class="btn-config" onclick="guardarConfig()">💾 Guardar y conectar</button>
     </div>
   </details>
 
-  <!-- Estado y controles -->
   <div class="grid">
-
     <div class="card estado-card">
       <div class="estado-info">
         <div class="card-label">Estado de la práctica</div>
@@ -599,19 +142,12 @@
         <div id="practicaInfo">—</div>
       </div>
       <div class="controls">
-        <button class="btn btn-iniciar" onclick="cambiarEstado('iniciar')" id="btnIniciar">
-          ▶ INICIAR
-        </button>
-        <button class="btn btn-pausar" onclick="cambiarEstado('pausar')" id="btnPausar" disabled>
-          ⏸ PAUSAR
-        </button>
-        <button class="btn btn-finalizar" onclick="cambiarEstado('finalizar')" id="btnFinalizar" disabled>
-          ⏹ FINALIZAR
-        </button>
+        <button class="btn btn-iniciar"   onclick="cambiarEstado('iniciar')"   id="btnIniciar">▶ INICIAR</button>
+        <button class="btn btn-pausar"    onclick="cambiarEstado('pausar')"    id="btnPausar"    disabled>⏸ PAUSAR</button>
+        <button class="btn btn-finalizar" onclick="cambiarEstado('finalizar')" id="btnFinalizar" disabled>⏹ FINALIZAR</button>
       </div>
     </div>
 
-    <!-- Estudiante -->
     <div class="card estudiante-card">
       <div class="card-label">Estudiante activo</div>
       <div class="estudiante-info">
@@ -623,74 +159,59 @@
       </div>
     </div>
 
-    <!-- Timer -->
     <div class="card">
       <div class="card-label">Tiempo transcurrido</div>
       <div id="timerDisplay">00:00:00</div>
     </div>
 
-    <!-- Precisión -->
     <div class="card">
       <div class="card-label">Precisión técnica</div>
-      <div id="precisionValue" style="color: var(--muted)">—%</div>
-      <div class="precision-ring">
-        <svg width="80" height="80" viewBox="0 0 80 80">
-          <circle cx="40" cy="40" r="35" fill="none" stroke="#0f1f3d" stroke-width="6"/>
-          <circle id="precisionCircle" cx="40" cy="40" r="35" fill="none"
-            stroke="#00ff88" stroke-width="6" stroke-linecap="round"
-            stroke-dasharray="220" stroke-dashoffset="220"/>
-        </svg>
-      </div>
+      <div id="precisionValue" style="color:var(--muted)">—%</div>
     </div>
 
-    <!-- Ángulo sensor -->
     <div class="card">
       <div class="card-label">Sensor — Ángulo (pitch)</div>
-      <div class="sensor-value" id="anguloValor" style="color: var(--muted)">—</div>
+      <div class="sensor-value" id="anguloValor" style="color:var(--muted)">—</div>
       <div class="sensor-unit">grados °</div>
-      <div class="sensor-bar-container">
-        <div class="sensor-bar" id="anguloBar" style="background: var(--accent);"></div>
-      </div>
+      <div class="sensor-bar-container"><div class="sensor-bar" id="anguloBar"></div></div>
       <span class="sensor-tag tag-ok" id="anguloTag">SIN DATOS</span>
     </div>
 
-    <!-- Fuerza sensor -->
     <div class="card">
       <div class="card-label">Sensor — Fuerza aplicada</div>
-      <div class="sensor-value" id="fuerzaValor" style="color: var(--muted)">—</div>
+      <div class="sensor-value" id="fuerzaValor" style="color:var(--muted)">—</div>
       <div class="sensor-unit">gramos-fuerza (g)</div>
-      <div class="sensor-bar-container">
-        <div class="sensor-bar" id="fuerzaBar" style="background: var(--accent);"></div>
-      </div>
+      <div class="sensor-bar-container"><div class="sensor-bar" id="fuerzaBar"></div></div>
       <span class="sensor-tag tag-ok" id="fuerzaTag">SIN DATOS</span>
     </div>
-
   </div>
 
-  <!-- Footer -->
   <div class="footer-bar">
     <span class="server-url" id="serverDisplay">Servidor: no configurado</span>
     <span id="lastUpdate">Sin actualización</span>
   </div>
-
 </div>
 
 <script>
-// ============================================
+// ══════════════════════════════════════════
 // CONFIGURACIÓN
-// ============================================
-let SERVER_URL = localStorage.getItem('veinview_server') || 'https://backendveinviewar-production.up.railway.app';
-let DEVICE_ID  = localStorage.getItem('veinview_device') || 'oculus-quest3-veinview-001';
+// CORREGIDO: default HTTPS
+// ══════════════════════════════════════════
+let SERVER_URL    = localStorage.getItem('veinview_server')
+                    || 'https://backendveinviewar-production.up.railway.app';
+let DEVICE_ID     = localStorage.getItem('veinview_device') || 'oculus-quest3-veinview-001';
 let SESSION_TOKEN = '';
 let PRACTICA_ID   = -1;
-let conectado = false;
-let timerInterval = null;
-let timerSegundos = 0;
-let pollingInterval = null;
+let conectado     = false;
+let timerInterval     = null;
+let timerSegundos     = 0;
+let pollingInterval   = null;
+let heartbeatInterval = null;  // NUEVO
+let errorCount        = 0;
+const MAX_ERRORS      = 5;
 
-// Cargar config guardada en inputs
-document.getElementById('serverUrl').value = SERVER_URL;
-document.getElementById('deviceId').value  = DEVICE_ID;
+document.getElementById('serverUrl').value  = SERVER_URL;
+document.getElementById('deviceId').value   = DEVICE_ID;
 if (SERVER_URL) document.getElementById('serverDisplay').textContent = 'Servidor: ' + SERVER_URL;
 
 function guardarConfig() {
@@ -703,66 +224,91 @@ function guardarConfig() {
   iniciarConexion();
 }
 
-// ============================================
+// ══════════════════════════════════════════
 // CONEXIÓN AUTOMÁTICA
-// ============================================
+// ══════════════════════════════════════════
 async function iniciarConexion() {
-  if (!SERVER_URL) {
-    setConn('error', 'Configura el servidor ↑');
-    return;
-  }
-  setConn('connecting', 'Conectando...');
+  if (!SERVER_URL) { setConn('error','Configura el servidor ↑'); return; }
+  setConn('connecting','Conectando...');
 
   try {
     const res = await fetch(SERVER_URL + '/api/ra/conectar-automatico/', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method:  'POST',
+      headers: {'Content-Type':'application/json'},
       body: JSON.stringify({
-        dispositivo_ra: 'Meta Quest 3 / Web Browser',
-        device_id: DEVICE_ID,
+        dispositivo_ra:     'Web Browser Dashboard',
+        device_id:          DEVICE_ID,
         modo_visualizacion: 'overlay',
-        escala_modelo: 1.0,
-        opacidad: 0.8
-      })
+        escala_modelo:      1.0,
+        opacidad:           0.8,
+      }),
     });
-
     const data = await res.json();
 
     if (data.status === 'success') {
       SESSION_TOKEN = data.session_token;
       PRACTICA_ID   = data.practica?.id || -1;
-      conectado = true;
-      setConn('connected', 'Conectado');
+      conectado     = true;
+      errorCount    = 0;
+      setConn('connected','Conectado · HTTPS');
+      document.getElementById('reconnectBanner').style.display = 'none';
 
-      // Mostrar info estudiante
       if (data.estudiante) {
         document.getElementById('estudianteNombre').textContent = data.estudiante.nombre;
         document.getElementById('estudianteCodigo').textContent = 'Código: ' + data.estudiante.codigo;
       }
-
       actualizarEstadoPractica(data.practica?.estado || 'iniciada');
       iniciarPolling();
+      iniciarHeartbeat();   // NUEVO
 
     } else if (data.status === 'no_practice') {
-      setConn('error', 'Sin práctica activa');
-      setEstado('SIN PRÁCTICA', 'detenida');
-      // Reintentar en 5s
+      setConn('error','Sin práctica activa');
+      setEstado('SIN PRÁCTICA','detenida');
       setTimeout(iniciarConexion, 5000);
-
     } else {
-      setConn('error', 'Error de conexión');
+      setConn('error','Error de conexión');
       setTimeout(iniciarConexion, 5000);
     }
-
-  } catch (e) {
-    setConn('error', 'Sin conexión al servidor');
+  } catch(e) {
+    setConn('error','Sin conexión al servidor');
     setTimeout(iniciarConexion, 5000);
   }
 }
 
-// ============================================
+// ══════════════════════════════════════════
+// HEARTBEAT — cada 20s para no superar el
+// timeout de 120s de la sesión RA
+// ══════════════════════════════════════════
+function iniciarHeartbeat() {
+  if (heartbeatInterval) clearInterval(heartbeatInterval);
+  heartbeatInterval = setInterval(enviarHeartbeat, 20000);
+}
+
+async function enviarHeartbeat() {
+  if (!SESSION_TOKEN) return;
+  const t0 = Date.now();
+  try {
+    const res = await fetch(SERVER_URL + '/api/ra/heartbeat/', {
+      method:  'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        session_token:    SESSION_TOKEN,
+        timestamp:        t0,
+        latencia_cliente: Date.now() - t0,
+      }),
+    });
+    if (res.status === 404) {
+      // Sesión expiró — reconectar
+      console.warn('[VeinView] Sesión expirada, reconectando...');
+      limpiarIntervalos();
+      reconectar();
+    }
+  } catch(_) { /* silencioso */ }
+}
+
+// ══════════════════════════════════════════
 // POLLING DE ALERTAS (cada 1.5s)
-// ============================================
+// ══════════════════════════════════════════
 function iniciarPolling() {
   if (pollingInterval) clearInterval(pollingInterval);
   pollingInterval = setInterval(verificarAlertas, 1500);
@@ -773,187 +319,164 @@ async function verificarAlertas() {
   if (!SESSION_TOKEN) return;
   try {
     const res = await fetch(SERVER_URL + '/api/ra/alertas/?session_token=' + SESSION_TOKEN);
-    const data = await res.json();
 
+    if (res.status === 401) {
+      errorCount++;
+      if (errorCount >= MAX_ERRORS) { limpiarIntervalos(); reconectar(); }
+      return;
+    }
+
+    const data = await res.json();
+    errorCount  = 0;
     actualizarSensores(data);
     actualizarBanner(data);
     document.getElementById('lastUpdate').textContent =
       'Actualizado: ' + new Date().toLocaleTimeString('es-CO');
-
   } catch(e) {
-    // silencioso
+    errorCount++;
+    if (errorCount >= MAX_ERRORS) { limpiarIntervalos(); reconectar(); }
   }
 }
 
-// ============================================
+// ══════════════════════════════════════════
+// RECONEXIÓN AUTOMÁTICA
+// ══════════════════════════════════════════
+function reconectar() {
+  conectado     = false;
+  SESSION_TOKEN = '';
+  document.getElementById('reconnectBanner').style.display = 'block';
+  setConn('connecting','Reconectando...');
+  setTimeout(iniciarConexion, 3000);
+}
+
+function limpiarIntervalos() {
+  if (pollingInterval)   clearInterval(pollingInterval);
+  if (heartbeatInterval) clearInterval(heartbeatInterval);
+  pollingInterval = heartbeatInterval = null;
+}
+
+// ══════════════════════════════════════════
 // ACTUALIZAR UI — SENSORES
-// ============================================
+// ══════════════════════════════════════════
 function actualizarSensores(data) {
   if (!data || data.status === 'no_practice') return;
 
-  // Ángulo
   const angulo = data.angulo;
   if (angulo && angulo.valor_actual !== undefined) {
     const val = angulo.valor_actual;
-    document.getElementById('anguloValor').textContent = val.toFixed(1);
-    document.getElementById('anguloValor').style.color = getColorSensor(angulo);
-
-    // Barra: 0-45° mapeado a 0-100%
+    document.getElementById('anguloValor').textContent   = val.toFixed(1);
+    document.getElementById('anguloValor').style.color   = getColorSensor(angulo);
     const pct = Math.min(Math.abs(val) / 45 * 100, 100);
-    document.getElementById('anguloBar').style.width = pct + '%';
+    document.getElementById('anguloBar').style.width      = pct + '%';
     document.getElementById('anguloBar').style.background = getColorSensor(angulo);
     setTag('anguloTag', angulo);
   }
 
-  // Fuerza
   const fuerza = data.fuerza;
   if (fuerza && fuerza.valor_actual !== undefined) {
     const val = fuerza.valor_actual;
-    document.getElementById('fuerzaValor').textContent = val.toFixed(0);
-    document.getElementById('fuerzaValor').style.color = getColorSensor(fuerza);
-
-    // Barra: 0-500g mapeado a 0-100%
+    document.getElementById('fuerzaValor').textContent   = val.toFixed(0);
+    document.getElementById('fuerzaValor').style.color   = getColorSensor(fuerza);
     const pct = Math.min(val / 500 * 100, 100);
-    document.getElementById('fuerzaBar').style.width = pct + '%';
+    document.getElementById('fuerzaBar').style.width      = pct + '%';
     document.getElementById('fuerzaBar').style.background = getColorSensor(fuerza);
     setTag('fuerzaTag', fuerza);
   }
 }
 
-function getColorSensor(sensor) {
-  if (sensor.en_rango_optimo)    return 'var(--green)';
-  if (sensor.en_rango_aceptable) return 'var(--yellow)';
+function getColorSensor(s) {
+  if (s.en_rango_optimo)    return 'var(--green)';
+  if (s.en_rango_aceptable) return 'var(--yellow)';
   return 'var(--red)';
 }
 
 function setTag(id, sensor) {
   const el = document.getElementById(id);
   el.textContent = sensor.mensaje || '—';
-  el.className = 'sensor-tag';
-  if (sensor.en_rango_optimo)         el.classList.add('tag-ok');
+  el.className   = 'sensor-tag';
+  if      (sensor.en_rango_optimo)    el.classList.add('tag-ok');
   else if (sensor.en_rango_aceptable) el.classList.add('tag-warn');
   else                                 el.classList.add('tag-critical');
 }
 
-// ============================================
-// BANNER DE ALERTA
-// ============================================
 function actualizarBanner(data) {
   const banner = document.getElementById('alertBanner');
   if (data.alerta_critica) {
     const msgs = [];
-    if (data.fuerza?.activa && !data.fuerza?.en_rango_aceptable)
-      msgs.push('💪 ' + data.fuerza.mensaje);
-    if (data.angulo?.activa && !data.angulo?.en_rango_aceptable)
-      msgs.push('📐 ' + data.angulo.mensaje);
-
-    if (msgs.length > 0) {
+    if (data.fuerza?.activa && !data.fuerza?.en_rango_aceptable) msgs.push('💪 ' + data.fuerza.mensaje);
+    if (data.angulo?.activa && !data.angulo?.en_rango_aceptable) msgs.push('📐 ' + data.angulo.mensaje);
+    if (msgs.length) {
       document.getElementById('alertMessage').textContent = msgs.join('  •  ');
-      banner.className = 'show';
-      banner.style.display = 'flex';
+      banner.className = 'show'; banner.style.display = 'flex'; return;
     }
-  } else {
-    banner.style.display = 'none';
-    banner.className = '';
   }
+  banner.style.display = 'none'; banner.className = '';
 }
 
-// ============================================
+// ══════════════════════════════════════════
 // BOTONES DE CONTROL
-// ============================================
+// ══════════════════════════════════════════
 async function cambiarEstado(accion) {
-  if (!conectado || PRACTICA_ID === -1) {
-    alert('No hay práctica activa conectada.');
-    return;
-  }
-
-  const estadoMap = { iniciar: 'iniciada', pausar: 'pausada', finalizar: 'finalizada' };
-  const nuevoEstado = estadoMap[accion];
-
+  if (!conectado || PRACTICA_ID === -1) { alert('No hay práctica activa conectada.'); return; }
+  const estadoMap = {iniciar:'iniciada', pausar:'pausada', finalizar:'finalizada'};
   try {
     const res = await fetch(SERVER_URL + '/api/placa/practicas/' + PRACTICA_ID + '/', {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Session-Token': SESSION_TOKEN
-      },
-      body: JSON.stringify({ estado: nuevoEstado })
+      method:  'PATCH',
+      headers: {'Content-Type':'application/json','X-Session-Token':SESSION_TOKEN},
+      body:    JSON.stringify({estado: estadoMap[accion]}),
     });
-
-    if (res.ok) {
-      actualizarEstadoPractica(nuevoEstado);
-    } else {
-      const err = await res.json();
-      alert('Error: ' + (err.error || 'No se pudo cambiar el estado'));
-    }
-  } catch(e) {
-    alert('Error de conexión con el servidor');
-  }
+    if (res.ok) actualizarEstadoPractica(estadoMap[accion]);
+    else { const err = await res.json(); alert('Error: ' + (err.error || 'No se pudo cambiar')); }
+  } catch(e) { alert('Error de conexión con el servidor'); }
 }
 
-// ============================================
+// ══════════════════════════════════════════
 // ESTADO VISUAL
-// ============================================
+// ══════════════════════════════════════════
 function actualizarEstadoPractica(estado) {
-  const textos = {
-    iniciada:   '▶  CORRIENDO',
-    pausada:    '⏸  PAUSADA',
-    finalizada: '⏹  FINALIZADA',
-    detenida:   'SIN PRÁCTICA'
-  };
-
-  const clases = {
-    iniciada: 'corriendo', pausada: 'pausada',
-    finalizada: 'finalizada', detenida: 'detenida'
-  };
-
+  const textos  = {iniciada:'▶  CORRIENDO', pausada:'⏸  PAUSADA', finalizada:'⏹  FINALIZADA', detenida:'SIN PRÁCTICA'};
+  const clases  = {iniciada:'corriendo',    pausada:'pausada',     finalizada:'finalizada',     detenida:'detenida'};
   setEstado(textos[estado] || estado.toUpperCase(), clases[estado] || 'detenida');
 
-  // Botones
-  document.getElementById('btnIniciar').disabled  = estado === 'iniciada';
-  document.getElementById('btnPausar').disabled   = estado !== 'iniciada';
+  document.getElementById('btnIniciar').disabled   = estado === 'iniciada';
+  document.getElementById('btnPausar').disabled    = estado !== 'iniciada';
   document.getElementById('btnFinalizar').disabled = estado === 'finalizada' || estado === 'detenida';
 
-  // Timer
   if (estado === 'iniciada' && !timerInterval) {
     timerInterval = setInterval(() => {
       timerSegundos++;
       document.getElementById('timerDisplay').textContent = formatTime(timerSegundos);
     }, 1000);
   } else if (estado === 'pausada' || estado === 'finalizada') {
-    clearInterval(timerInterval);
-    timerInterval = null;
+    clearInterval(timerInterval); timerInterval = null;
   }
 }
 
 function setEstado(texto, clase) {
   const el = document.getElementById('estadoTexto');
-  el.textContent = texto;
-  el.className = 'estado-' + clase;
+  el.textContent = texto; el.className = 'estado-' + clase;
 }
 
 function formatTime(s) {
-  const h = String(Math.floor(s / 3600)).padStart(2, '0');
-  const m = String(Math.floor((s % 3600) / 60)).padStart(2, '0');
-  const sec = String(s % 60).padStart(2, '0');
-  return h + ':' + m + ':' + sec;
+  const h = String(Math.floor(s/3600)).padStart(2,'0');
+  const m = String(Math.floor((s%3600)/60)).padStart(2,'0');
+  const sec = String(s%60).padStart(2,'0');
+  return h+':'+m+':'+sec;
 }
 
 function setConn(estado, texto) {
-  const dot = document.getElementById('connDot');
-  const txt = document.getElementById('connText');
-  dot.className = 'dot ' + estado;
-  txt.textContent = texto;
+  document.getElementById('connDot').className    = 'dot ' + estado;
+  document.getElementById('connText').textContent = texto;
 }
 
-// ============================================
+// ══════════════════════════════════════════
 // INICIO
-// ============================================
+// ══════════════════════════════════════════
 if (SERVER_URL) {
   iniciarConexion();
 } else {
-  document.getElementById('configPanel').setAttribute('open', '');
-  setConn('error', 'Configura el servidor ↑');
+  document.getElementById('configPanel').setAttribute('open','');
+  setConn('error','Configura el servidor ↑');
 }
 </script>
 </body>
