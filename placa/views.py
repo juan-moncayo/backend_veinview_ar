@@ -1,4 +1,3 @@
-# placa/views.py
 from rest_framework import status, viewsets
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
@@ -139,7 +138,7 @@ def enviar_datos_sensores(request):
 
     dispositivo, error_response = verificar_api_key(request)
     if error_response:
-        logger.error(f"❌ Error en API Key")
+        logger.error("❌ Error en API Key")
         return error_response
 
     logger.info(f"✅ Dispositivo: {dispositivo.nombre}")
@@ -186,11 +185,13 @@ def enviar_datos_sensores(request):
 
         total_datos = DatosSensor.objects.filter(practica=practica_activa).count()
 
-        logger.info(f"✅ Dato #{dato_sensor.id} guardado — "
-                    f"Pitch:{dato_sensor.angulo_pitch:.1f}° "
-                    f"Fuerza:{dato_sensor.fuerza:.1f}g "
-                    f"Técnica:{dato_sensor.tecnica_correcta} "
-                    f"Total:{total_datos}")
+        logger.info(
+            f"✅ Dato #{dato_sensor.id} guardado — "
+            f"Pitch:{dato_sensor.angulo_pitch:.1f}° "
+            f"Fuerza:{dato_sensor.fuerza:.1f}g "
+            f"Técnica:{dato_sensor.tecnica_correcta} "
+            f"Total:{total_datos}"
+        )
 
         return Response({
             'status': 'ok',
@@ -253,9 +254,19 @@ class DispositivoESP32ViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class PracticaActivaViewSet(viewsets.ModelViewSet):
-    queryset = PracticaActiva.objects.select_related('estudiante', 'dispositivo').all()
+    queryset = PracticaActiva.objects.select_related(
+        'estudiante', 'dispositivo'
+    ).all()
     serializer_class = PracticaActivaSerializer
     permission_classes = [AllowAny]
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        # Filtrar por estudiante si se pasa el parámetro
+        estudiante_id = self.request.query_params.get('estudiante')
+        if estudiante_id:
+            queryset = queryset.filter(estudiante_id=estudiante_id)
+        return queryset
 
     def create(self, request, *args, **kwargs):
         estudiante_id = request.data.get('estudiante_id')
@@ -289,8 +300,10 @@ class PracticaActivaViewSet(viewsets.ModelViewSet):
             estado='iniciada'
         )
 
-        logger.info(f"✅ Práctica #{practica.id} creada — "
-                    f"Estudiante: {estudiante.nombre_completo}")
+        logger.info(
+            f"✅ Práctica #{practica.id} creada — "
+            f"Estudiante: {estudiante.nombre_completo}"
+        )
 
         return Response(
             self.get_serializer(practica).data,
@@ -311,15 +324,11 @@ class PracticaActivaViewSet(viewsets.ModelViewSet):
 
         if nuevo_estado == 'pausada' and practica.estado == 'iniciada':
             practica.pausar()
-
         elif nuevo_estado == 'iniciada' and practica.estado == 'pausada':
             practica.reanudar()
-
         elif nuevo_estado == 'finalizada':
             practica.finalizar()
-            # Generar resumen automáticamente al finalizar
             self._generar_resumen_automatico(practica, request)
-
         else:
             practica.estado = nuevo_estado
             practica.save()
@@ -331,7 +340,6 @@ class PracticaActivaViewSet(viewsets.ModelViewSet):
         return Response(self.get_serializer(practica).data)
 
     def _generar_resumen_automatico(self, practica, request):
-        """Genera o recalcula el resumen automáticamente al finalizar una práctica."""
         from profesor.models import ResumenPractica, Profesor
 
         try:
@@ -342,7 +350,6 @@ class PracticaActivaViewSet(viewsets.ModelViewSet):
                 except Profesor.DoesNotExist:
                     pass
 
-            # Si ya tiene resumen, recalcular con los rangos actuales
             if hasattr(practica, 'resumen'):
                 resumen = practica.resumen
                 resumen.calcular_estadisticas()
